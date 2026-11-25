@@ -38,6 +38,10 @@ Smrithi_AI/
 │   │                                     # Prevents case-mismatch permission/memory bugs and enforces 401 rejection in production mode.
 │   ├── config.py                         # Immutable AppConfig model reading runtime flags strictly from environment variables.
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
+│   ├── guardrails/                       # Deterministic pure-Python pre-query, math, and output safety gates.
+│   │   ├── __init__.py                   # Guardrails package marker.
+│   │   └── sql_ast.py                    # sqlglot AST validator enforcing single-SELECT queries, table allowlists, PII blocks, and 500 MB scan cap.
+│   │                                     # Prevents warehouse mutations, unapproved table scans, and accidental PII leaks before BigQuery runs.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
 │                                         # Shared canonical data contract across both A2A JSON-RPC messages and REST (/v1/query) calls.
 ├── domains/                              # Pluggable business use-case packs implementing DomainPlugin without modifying core/.
@@ -48,8 +52,12 @@ Smrithi_AI/
 │   │                                     # Decouples core/app.py from importing specific business domain packages directly.
 │   └── performance_marketing/            # Domain #1: AGEasy / Antara Senior Care Performance Marketing intelligence pack.
 │       ├── __init__.py                   # Package marker for the Performance Marketing domain pack.
-│       ├── plugin.py                     # DomainPlugin entry point for Performance Marketing (currently serving Slice 0 verified gateway ping).
-│       │                                 # Orchestrates refusal checks, parallel collection, Python math, and cited response rendering.
+│       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/MoM/YoY deltas, part-month clipping, and Rs formatting.
+│       │                                 # Ensures LLMs never compute ratios, average rates, or include Brand awareness spend in ROAS/CAC.
+│       ├── plugin.py                     # DomainPlugin entry point for Performance Marketing.
+│       │                                 # Orchestrates <1s refusal checks, parallel collection, Python math, and cited response rendering.
+│       ├── rules.py                      # Deterministic <1s Known Refusal interceptor (Product/City/Daily/Brand ROAS, mutations) and settlement status classifier.
+│       │                                 # Turns impossible queries that previously timed out after 44 minutes into instant helpful explanations.
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
 │                                         # Enforces mathematical invariants at the schema level (e.g., phased rupee rows must sum to 100% of budget).
 └── tests/                                # Automated verification suite (offline unit tests run in <5s with zero cloud credentials).
@@ -61,5 +69,8 @@ Smrithi_AI/
         │                                 # Also enforces AGENTS.md AST invariants: <300 lines/file, zero marketing words in core/, zero local DB imports.
         ├── test_auth.py                  # Tests WIF principal case/whitespace normalization, GCP IAP prefix stripping, and 401 auth enforcement.
         ├── test_codebase_map.py          # Parses CODEBASE_MAP.md and verifies every live repository file is documented and nothing stale remains.
-        └── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
+        ├── test_known_refusals.py        # Verifies <10ms interception of Product/City/Daily/Brand ROAS & ad mutations without blocking Campaign Plans.
+        ├── test_math_engine.py           # Tests SUM/SUM ratios, Brand exclusion, CPM >= 1.0 rule, <5% flat deltas, reversals, and Indian Rs formatting.
+        ├── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
+        └── test_sql_guardrails.py        # Tests sqlglot DDL/DML blocking, unallowlisted table rejection, CTE handling, and PII column / SELECT * blocks.
 ```

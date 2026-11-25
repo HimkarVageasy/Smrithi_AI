@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from core.schemas import Citation, SmritiQueryResponse
+from domains.performance_marketing.rules import check_marketing_known_refusal
 
 _IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
@@ -16,8 +17,7 @@ class PerformanceMarketingPlugin:
     domain_id: str = "performance_marketing"
 
     def check_known_refusal(self, parsed_intent: dict[str, Any]) -> str | None:
-        # Full deterministic refusal rules (`rules.py`) plug in during Slice 1.
-        return None
+        return check_marketing_known_refusal(str(parsed_intent.get("question", "")))
 
     async def collect_parallel(self, parsed_intent: dict[str, Any]) -> dict[str, Any]:
         now_ist = datetime.now(tz=_IST).strftime("%d %b %Y %H:%M:%S IST")
