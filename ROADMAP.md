@@ -12,11 +12,11 @@
 
 ---
 
-## Slice 1: BigQuery Engine + Deterministic Math + Known Refusals
-- Implement `core/guardrails/sql_ast.py` (`sqlglot` single-SELECT allowlist + PII column block + `maximum_bytes_billed`).
-- Implement `domains/performance_marketing/collectors/bigquery_poc.py` covering `ge_account_monthly`, `ge_account_closed_months`, `ge_month_status`, `ge_family_monthly`, `ge_product_demand_monthly`, `ge_city_product_demand_monthly`.
-- Implement `rules.py` (instant `< 1s` Known Refusals for Product ROAS, City ROAS, Daily Net ROAS, Brand ROAS, Write actions) and `math_engine.py` (`DoD`, `WoW`, `MoM`, `YoY`, `SUM/SUM` ratios, part-month matching).
-- **Done When:** The 3-month MoM query that previously timed out after **44 minutes** returns an exact, cited table in **`< 5 seconds`**, and offline unit tests pass 100%.
+## Slice 1: BigQuery Engine + Deterministic Math + Known Refusals — ✅ COMPLETED (Nov 25, 2026)
+- Implemented `core/guardrails/sql_ast.py` (`sqlglot` single-SELECT allowlist + `sales_master_data` PII column block + `500 MB` `maximum_bytes_billed`) and `core/guardrails/output_audit.py` (PII scrubber + causal/margin word blocker + citation gate).
+- Implemented `domains/performance_marketing/collectors/bigquery_poc.py` against verified `gemini-poc-503210.Gemini_POC` schemas (`ge_account_monthly`, `ge_account_closed_months`, `ge_month_status`, `ge_family_monthly`, `ge_product_demand_monthly`, `ge_city_product_demand_monthly`, `sales_master_data`).
+- Implemented `rules.py` (`< 1s` hard blocks for Mutations/Brand ROAS + Answer-First hybrid grain boundaries for Product/City/Daily ROAS) and `math_engine.py` (`DoD`, `WoW`, `MoM`, `YoY`, `SUM/SUM` ratios, reversal-aware headlines, Indian `Rs` formatting).
+- **Verified Live:** 3-month MoM Account + Ad-Family query returned verified `SUM/SUM` tables and caught real Sep->Oct reversal in seconds on `Smriti-v2-Dev`, with full offline unit test coverage.
 
 ---
 

@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from core.router import TimeGrainOption, extract_time_spec
+from domains.performance_marketing.rules import GrainBoundaryCaveat, detect_grain_boundary_caveat
 
 QueryFocus = Literal[
     "ping",
@@ -14,13 +15,23 @@ QueryFocus = Literal[
     "family_focus",
     "product_or_city_demand",
     "daily_or_weekly_orders",
+    "product_roas_hybrid",
+    "city_roas_hybrid",
+    "daily_roas_hybrid",
 ]
 
 _PING_RE = re.compile(r"^\s*ping(\s+smriti(\s+v2)?)?[!\s.?]*$", re.IGNORECASE)
 
 _KNOWN_FAMILIES: tuple[str, ...] = (
     "nebulizer",
+    "healthmonitors",
+    "massagegun",
+    "glucosesensor",
+    "walking stick",
+    "bathroomsafety",
+    "allprodpros",
     "allproducts",
+    "catalogue",
     "walker",
     "rollator",
     "wheelchair",
@@ -72,16 +83,18 @@ class ParsedMarketingQuery:
     product_family: str | None = None
     catalogue_product: str | None = None
     city: str | None = None
+    boundary_caveat: GrainBoundaryCaveat | None = None
 
 
 def parse_marketing_query(question: str) -> ParsedMarketingQuery:
-    """Classify marketing warehouse query into focus, time grain, and entity filters."""
+    """Classify marketing warehouse query into focus, time grain, entities, and caveats."""
     q = question.strip()
     if _PING_RE.match(q):
         return ParsedMarketingQuery(focus="ping", grain="MoM", window_count=1)
 
     time_spec = extract_time_spec(q, default_months=3)
     lowered = q.lower()
+    caveat = detect_grain_boundary_caveat(q)
 
     matched_family: str | None = None
     for fam in _KNOWN_FAMILIES:
@@ -92,10 +105,41 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
     matched_city: str | None = None
     for city in _KNOWN_CITIES:
         if re.search(rf"\b{re.escape(city)}\b", lowered):
-            matched_city = "BENGALURU" if city == "bangalore" else (
-                "GURUGRAM" if city == "gurgaon" else city.upper()
+            matched_city = (
+                "BENGALURU"
+                if city == "bangalore"
+                else ("GURUGRAM" if city == "gurgaon" else city.upper())
             )
             break
+
+    if caveat is not None:
+        if caveat.kind == "product_roas":
+            return ParsedMarketingQuery(
+                focus="product_roas_hybrid",
+                grain="MoM",
+                window_count=max(3, time_spec.window_count),
+                product_family=matched_family,
+                catalogue_product=matched_family,
+                boundary_caveat=caveat,
+            )
+        if caveat.kind == "city_roas":
+            return ParsedMarketingQuery(
+                focus="city_roas_hybrid",
+                grain="MoM",
+                window_count=max(3, time_spec.window_count),
+                product_family=matched_family,
+                catalogue_product=matched_family,
+                city=matched_city,
+                boundary_caveat=caveat,
+            )
+        if caveat.kind == "daily_net_roas":
+            return ParsedMarketingQuery(
+                focus="daily_roas_hybrid",
+                grain="DoD",
+                window_count=14,
+                product_family=matched_family,
+                boundary_caveat=caveat,
+            )
 
     if time_spec.grain in {"DoD", "WoW"}:
         return ParsedMarketingQuery(

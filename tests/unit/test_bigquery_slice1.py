@@ -205,16 +205,50 @@ def test_golden_scenario_1_three_month_mom_account_and_family_trend() -> None:
     assert body["latency_ms"] < 5000
 
 
-def test_golden_scenario_2_product_roas_trap_intercepts_with_zero_sql_queries() -> None:
+def test_golden_scenario_2_mixed_product_roas_answers_valid_tables_and_explains_boundary() -> None:
     collector, queries = _build_mock_executor()
     registry = DomainRegistry()
     registry.register(PerformanceMarketingPlugin(bq_collector=collector), is_default=True)
     client = TestClient(create_app(registry=registry))
 
-    resp = client.post("/v1/query", json={"question": "Delivered ROAS by product"})
+    prompt = (
+        "Show a Month-on-Month trend for the last 3 months (including the current month) "
+        "for total Spend, Placed Orders, Delivered Orders, and Delivered ROAS by product."
+    )
+    resp = client.post("/v1/query", json={"question": prompt})
     assert resp.status_code == 200
-    assert len(queries) == 0
-    assert "Product/SKU-Level ROAS" in resp.json()["answer_markdown"]
+    md = resp.json()["answer_markdown"]
+
+    # Answers all valid grains FIRST + appends explicit Scope Boundary note
+    assert len(queries) == 4
+    assert "#### Account Month-on-Month Trend" in md
+    assert "Placed Orders" in md and "Delivered Orders" in md
+    assert "#### Ad-Family Spend & Net ROAS" in md
+    assert "#### Catalogue Product Order Demand" in md
+    assert "240" in md and "210" in md
+    assert "#### Scope Boundary — What Could Not Be Computed & Why" in md
+    assert "Catalogue Product / SKU-Level Spend & ROAS Not Computable" in md
+
+
+def test_city_roas_and_daily_roas_hybrids_return_valid_tables_plus_boundary() -> None:
+    collector, _ = _build_mock_executor()
+    registry = DomainRegistry()
+    registry.register(PerformanceMarketingPlugin(bq_collector=collector), is_default=True)
+    client = TestClient(create_app(registry=registry))
+
+    city_roas = client.post("/v1/query", json={"question": "Give me Delhi ROAS for October 2026"})
+    assert city_roas.status_code == 200
+    c_md = city_roas.json()["answer_markdown"]
+    assert "`DELHI`" in c_md
+    assert "National Ad-Family Spend & Net ROAS" in c_md
+    assert "City / State-Level ROAS & CAC Not Computable" in c_md
+
+    daily_roas = client.post("/v1/query", json={"question": "What was yesterday's net ROAS?"})
+    assert daily_roas.status_code == 200
+    d_md = daily_roas.json()["answer_markdown"]
+    assert "Daily Placed & Delivered Order Progression" in d_md
+    assert "Monthly Account Net ROAS & CAC" in d_md
+    assert "Single-Day Net Delivered ROAS & CAC Not Computable" in d_md
 
 
 def test_city_demand_and_dod_order_flows() -> None:

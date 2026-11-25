@@ -1,8 +1,9 @@
-"""Deterministic Performance Marketing business rules, Known Refusals, and settlement flags."""
+"""Deterministic Performance Marketing business rules, Known Refusals, and grain caveats."""
 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
@@ -12,6 +13,17 @@ SettlementStatus = Literal[
     "mostly settled; ratios can still move",
     "closed",
 ]
+
+GrainBoundaryKind = Literal["product_roas", "city_roas", "daily_net_roas"]
+
+
+@dataclass(frozen=True)
+class GrainBoundaryCaveat:
+    """Identifies an uncomputable sub-grain in a mixed query while allowing valid tables."""
+
+    kind: GrainBoundaryKind
+    explanation_markdown: str
+
 
 _PLANNING_INTENT_RE = re.compile(
     r"\b(plan\s+a|media\s+plan|campaign\s+plan|campaign\s+brief|design\s+a\s+campaign|"
@@ -86,7 +98,7 @@ _CREATIVE_WAREHOUSE_CPM_RE = re.compile(
 
 
 def check_marketing_known_refusal(question: str) -> str | None:
-    """Intercept impossible or mutating requests in <1ms with explanation + valid alternative."""
+    """Intercept strictly forbidden/zero-table requests in <1ms before touching BigQuery."""
     q = question.strip()
     if not q:
         return None
@@ -101,57 +113,68 @@ def check_marketing_known_refusal(question: str) -> str | None:
             "directly in Meta Ads Manager or Google Ads."
         )
 
-    # 2. Product-level / SKU-level ROAS or CAC.
-    if _PRODUCT_ROAS_CAC_RE.search(q):
-        return (
-            "**Product/SKU-Level ROAS & CAC Unavailable:** Paid ad spend is tracked at "
-            "**ad-family** grain (`Gemini_POC.ge_family_monthly`), not individual catalogue SKU "
-            "or `Product_` grain (and `allproducts` campaigns span multiple SKUs).\n\n"
-            "- **Valid Alternatives Available Immediately:**\n"
-            "  1. **Ad-Family Net ROAS & Net CAC** "
-            "(`Gemini_POC.ge_family_monthly`, e.g., `nebulizer`, `allproducts`)\n"
-            "  2. **Catalogue Product Delivered Orders & Revenue** "
-            "(`Gemini_POC.ge_product_demand_monthly`)"
-        )
-
-    # 3. City-level or State-level ROAS / CAC (ignore campaign brief prompts with target ROAS).
-    if _CITY_STATE_ROAS_CAC_RE.search(q) and not _PLANNING_INTENT_RE.search(q):
-        return (
-            "**City/State-Level ROAS & CAC Unavailable:** Delivered order attribution to paid ad "
-            "spend is not modeled at city or state grain in our warehouse.\n\n"
-            "- **Valid Alternatives Available Immediately:**\n"
-            "  1. **City Delivered Orders & Product Demand Share** "
-            "(`Gemini_POC.ge_city_product_demand_monthly`)\n"
-            "  2. **National Ad-Family Net ROAS & Net CAC** (`Gemini_POC.ge_family_monthly`)"
-        )
-
-    # 4. Daily Net ROAS or Daily Net CAC.
-    if _DAILY_NET_ROAS_CAC_RE.search(q):
-        return (
-            "**Daily Net ROAS & Daily Net CAC Unavailable:** Order delivery and RTO return "
-            "settlement take days to weeks, making single-day Net ROAS/CAC misleading.\n\n"
-            "- **Valid Alternatives Available Immediately:**\n"
-            "  1. **Daily Spend, Impressions, CTR, CPC, Paid Sessions & Placed Orders (`DoD`)**\n"
-            "  2. **Closed-Month / Monthly Net ROAS & Net CAC** "
-            "(`Gemini_POC.ge_account_closed_months`)"
-        )
-
-    # 5. Brand Campaign ROAS or CAC.
+    # 2. Brand Campaign ROAS or CAC (awareness spend is never evaluated on ROAS/CAC).
     if _BRAND_ROAS_CAC_RE.search(q):
         return (
             "**Brand Campaign ROAS & CAC Unavailable:** Brand awareness spend is strictly "
             "excluded from ROAS and CAC denominators because brand campaigns optimize for reach, "
             "not direct conversion.\n\n"
-            "- **Valid Alternative:** I can report **Brand Spend, Impressions, Reach, and CPM**."
+            "- **Valid Alternative:** Ask for **Account Monthly Brand Spend** or live campaign "
+            "delivery metrics (**Impressions, Reach, and CPM**)."
         )
 
-    # 6. Creative-level historical warehouse CPM.
+    # 3. Creative-level historical warehouse CPM (belongs in live ad connectors, not BigQuery).
     if _CREATIVE_WAREHOUSE_CPM_RE.search(q):
         return (
             "**Creative-Level Historical Warehouse CPM Unavailable:** Curated BigQuery views "
             "aggregate historical spend at account, campaign, and ad-family grain.\n\n"
-            "- **Valid Alternative:** I can query our **Live Meta Ads (`774668588585301`) & "
+            "- **Valid Alternative:** Query our **Live Meta Ads (`774668588585301`) & "
             "Google Ads Account connectors** for active creative-level CTR, CPC, and CPM."
+        )
+
+    return None
+
+
+def detect_grain_boundary_caveat(question: str) -> GrainBoundaryCaveat | None:
+    """Detect grain boundaries so Smriti answers all valid metrics first + explains the rest."""
+    q = question.strip()
+    if not q or _PLANNING_INTENT_RE.search(q):
+        return None
+
+    if _PRODUCT_ROAS_CAC_RE.search(q):
+        return GrainBoundaryCaveat(
+            kind="product_roas",
+            explanation_markdown=(
+                "**Catalogue Product / SKU-Level Spend & ROAS Not Computable:** Paid ad spend is "
+                "loaded at **Ad-Family** grain (`Gemini_POC.ge_family_monthly`), not individual "
+                "catalogue item or `Combo_SKU` grain, because multi-product campaigns "
+                "(`catalogue`, `allproducts`, `healthmonitors`) promote multiple items together. "
+                "Above, Smriti answered your request at all valid warehouse grains: **Account MoM "
+                "(Spend, Placed Orders, Delivered Orders, Net ROAS)**, **Ad-Family Spend & Net "
+                "ROAS**, and **Catalogue Product Placed & Delivered Orders**."
+            ),
+        )
+
+    if _CITY_STATE_ROAS_CAC_RE.search(q):
+        return GrainBoundaryCaveat(
+            kind="city_roas",
+            explanation_markdown=(
+                "**City / State-Level ROAS & CAC Not Computable:** Paid ad spend is not "
+                "attributed to delivery cities or states in our warehouse. Above, Smriti "
+                "provided **City Placed & Delivered Demand (`ge_city_product_demand_monthly`)** "
+                "alongside **National Ad-Family Net ROAS (`ge_family_monthly`)**."
+            ),
+        )
+
+    if _DAILY_NET_ROAS_CAC_RE.search(q):
+        return GrainBoundaryCaveat(
+            kind="daily_net_roas",
+            explanation_markdown=(
+                "**Single-Day Net Delivered ROAS & CAC Not Computable:** Order delivery and RTO "
+                "return settlement take days to weeks, making daily Net ROAS/CAC misleading. "
+                "Above, Smriti provided **Daily (`DoD`) Placed & Delivered Orders** alongside "
+                "**Monthly Account Net ROAS & Settlement Status**."
+            ),
         )
 
     return None

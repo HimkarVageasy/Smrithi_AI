@@ -51,36 +51,83 @@ class PerformanceMarketingPlugin:
                 "degraded_sources": [],
             }
 
-        if routed.focus == "product_or_city_demand":
-            demand_bundle = await self._bq.fetch_product_and_city_demand(
-                catalogue_product=routed.catalogue_product,
-                city=routed.city,
-                limit_months=routed.window_count + 1,
+        if routed.focus == "daily_roas_hybrid":
+            daily_rows, account_rows = await asyncio.gather(
+                self._bq.fetch_recent_daily_orders(days=routed.window_count),
+                self._bq.fetch_account_monthly(limit_months=4),
             )
+            return {
+                "routed": routed,
+                "today_ist": now_dt.date(),
+                "daily_rows": daily_rows,
+                "account_rows": account_rows,
+                "degraded_sources": [],
+            }
+
+        if routed.focus in {"product_or_city_demand", "city_roas_hybrid"}:
+            if routed.focus == "city_roas_hybrid":
+                demand_bundle, family_rows = await asyncio.gather(
+                    self._bq.fetch_product_and_city_demand(
+                        catalogue_product=routed.catalogue_product,
+                        city=routed.city,
+                        limit_months=routed.window_count + 1,
+                    ),
+                    self._bq.fetch_family_monthly(
+                        product_family=routed.product_family,
+                        limit_months=routed.window_count + 1,
+                    ),
+                )
+            else:
+                demand_bundle = await self._bq.fetch_product_and_city_demand(
+                    catalogue_product=routed.catalogue_product,
+                    city=routed.city,
+                    limit_months=routed.window_count + 1,
+                )
+                family_rows = []
             return {
                 "routed": routed,
                 "today_ist": now_dt.date(),
                 "product_rows": demand_bundle["product_demand"],
                 "city_rows": demand_bundle["city_demand"],
+                "family_rows": family_rows,
                 "degraded_sources": [],
             }
 
-        # Default & Family focus: fetch Account, Closed Months, and Family views in PARALLEL
+        # Account + Family (+ Catalogue Product demand when query touches product grain)
         lookback = routed.window_count + 2
-        account_rows, closed_rows, family_rows = await asyncio.gather(
-            self._bq.fetch_account_monthly(limit_months=lookback),
-            self._bq.fetch_account_closed_months(limit_months=lookback),
-            self._bq.fetch_family_monthly(
-                product_family=routed.product_family,
-                limit_months=routed.window_count + 1,
-            ),
-        )
+        if routed.focus == "product_roas_hybrid":
+            account_rows, closed_rows, family_rows, demand_bundle = await asyncio.gather(
+                self._bq.fetch_account_monthly(limit_months=lookback),
+                self._bq.fetch_account_closed_months(limit_months=lookback),
+                self._bq.fetch_family_monthly(
+                    product_family=routed.product_family,
+                    limit_months=routed.window_count + 1,
+                ),
+                self._bq.fetch_product_and_city_demand(
+                    catalogue_product=routed.catalogue_product,
+                    city=None,
+                    limit_months=routed.window_count + 1,
+                ),
+            )
+            product_rows = demand_bundle["product_demand"]
+        else:
+            account_rows, closed_rows, family_rows = await asyncio.gather(
+                self._bq.fetch_account_monthly(limit_months=lookback),
+                self._bq.fetch_account_closed_months(limit_months=lookback),
+                self._bq.fetch_family_monthly(
+                    product_family=routed.product_family,
+                    limit_months=routed.window_count + 1,
+                ),
+            )
+            product_rows = []
+
         return {
             "routed": routed,
             "today_ist": now_dt.date(),
             "account_rows": account_rows,
             "closed_rows": closed_rows,
             "family_rows": family_rows,
+            "product_rows": product_rows,
             "degraded_sources": [],
         }
 
@@ -98,6 +145,7 @@ class PerformanceMarketingPlugin:
     async def render_response(self, verified_payload: dict[str, Any]) -> SmritiQueryResponse:
         routed: ParsedMarketingQuery = verified_payload["routed"]
         trace_id = str(verified_payload["trace_id"])
+        caveat_md = routed.boundary_caveat.explanation_markdown if routed.boundary_caveat else None
 
         if routed.focus == "ping":
             collected_at = str(verified_payload["collected_at_ist"])
@@ -124,20 +172,26 @@ class PerformanceMarketingPlugin:
                 trace_id=trace_id,
             )
 
-        if routed.focus == "daily_or_weekly_orders":
+        if routed.focus in {"daily_or_weekly_orders", "daily_roas_hybrid"}:
             return render_daily_orders_report(
                 daily_rows=verified_payload["daily_rows"],
                 grain=routed.grain,
                 trace_id=trace_id,
+                account_rows=verified_payload.get("account_rows"),
+                today_ist=verified_payload["today_ist"],
+                boundary_note=caveat_md,
             )
 
-        if routed.focus == "product_or_city_demand":
+        if routed.focus in {"product_or_city_demand", "city_roas_hybrid"}:
             return render_demand_report(
                 product_rows=verified_payload["product_rows"],
                 city_rows=verified_payload["city_rows"],
                 city=routed.city,
                 catalogue_product=routed.catalogue_product,
                 trace_id=trace_id,
+                family_rows=verified_payload.get("family_rows"),
+                today_ist=verified_payload["today_ist"],
+                boundary_note=caveat_md,
             )
 
         return render_account_and_family_report(
@@ -148,4 +202,6 @@ class PerformanceMarketingPlugin:
             product_family=routed.product_family,
             today_ist=verified_payload["today_ist"],
             trace_id=trace_id,
+            product_demand_rows=verified_payload.get("product_rows"),
+            boundary_note=caveat_md,
         )

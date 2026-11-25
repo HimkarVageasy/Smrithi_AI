@@ -93,14 +93,16 @@
 
 ## 3. Deterministic Business & Refusal Rules (`rules.py`)
 
-### Instant Known Refusals (Return in `< 1s`, Never Loop!)
-If asked for any of the following, `rules.py` intercepts immediately, explains **why** the metric does not exist in our data model, and offers the closest valid alternative:
-1. **Product-Level ROAS or CAC** *(Ad spend is loaded at ad-family grain in `ge_family_monthly`, not SKU/catalogue-product grain; `allproducts` campaigns span multiple SKUs).* -> Offer **Ad-Family ROAS** + **Catalogue Product Delivered Orders**.
-2. **City-Level or State-Level ROAS / CAC** *(No city-level delivered ad attribution exists).* -> Offer **City Delivered Orders & Share (`ge_city_product_demand_monthly`)**.
-3. **Daily Net ROAS or Daily Net CAC** *(Delivery + RTO settlement takes days/weeks, making daily net ROAS misleading).* -> Offer **Daily Spend, CTR, CPC, Sessions & Placed Orders (DoD)** + **Closed/Monthly Net ROAS**.
-4. **Brand Campaign ROAS or CAC** *(Brand spend is awareness-only; report Brand Spend only).*
-5. **Creative-Level Historical Warehouse CPM** *(Query live Meta/Google Ads Account connector for active creative delivery metrics instead).*
-6. **Any Write / Mutate Request** (*"Pause this ad"*, *"Create this campaign in Meta"*) -> Route *"need to run / launch a campaign"* to **Read-Only Campaign Planning**; refuse actual ad-account mutations cleanly.
+### Deterministic Refusals & Answer-First Grain Boundaries (`rules.py`)
+1. **Answer-First Grain Boundaries (Return Valid Tables + Scope Note in `< 3s`, Never Loop!):**
+   When a query mixes answerable warehouse metrics with an uncomputable sub-grain, Smriti **answers 100% of the valid tables first** via parallel `asyncio.gather` and appends a clear `Scope Boundary — What Could Not Be Computed & Why` note:
+   - **Product / SKU-Level ROAS or CAC** *(Ad spend is loaded at ad-family grain in `ge_family_monthly`, not SKU/catalogue-product grain; `allproducts` and `catalogue` campaigns span multiple SKUs).* -> Returns **Account MoM (`Total Spend`, `Placed Orders`, `Delivered Orders`, `Net ROAS`)** + **Ad-Family Spend & Net ROAS** + **Catalogue Product Placed & Delivered Orders**, followed by the Product-ROAS boundary explanation.
+   - **City-Level or State-Level ROAS / CAC** *(No city-level delivered ad spend attribution exists).* -> Returns **City Placed & Delivered Demand (`ge_city_product_demand_monthly`)** + **National Ad-Family Net ROAS**, followed by the City-ROAS boundary explanation.
+   - **Daily Net ROAS or Daily Net CAC** *(Delivery + RTO settlement takes days/weeks, making daily net ROAS misleading).* -> Returns **Daily (`DoD`) Placed & Delivered Orders** + **Monthly Account Net ROAS & Settlement Status**, followed by the Daily-ROAS boundary explanation.
+2. **Instant `< 1s` Hard Refusals (Zero Warehouse Queries):**
+   - **Brand Campaign ROAS or CAC** *(Brand spend is awareness-only; excluded from ROAS/CAC).*
+   - **Creative-Level Historical Warehouse CPM** *(Query live Meta/Google Ads Account connector for active creative delivery metrics instead).*
+   - **Any Write / Mutate Request** (*"Pause this ad"*, *"Increase daily budget"*) -> Route *"need to run / launch a campaign"* to **Read-Only Campaign Planning**; refuse live ad-account mutations cleanly.
 
 ### Period & Settlement Rules
 - **Provisional Month:** Current calendar month is ALWAYS flagged `provisional` (RTOs still in transit -> inflated early ROAS).
