@@ -1,0 +1,34 @@
+# Python virtual environments & bytecode
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+# Test & linter caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Secrets & local environment overrides
+.env
+.env.*
+!.env.example
+
+# IDE & OS artifacts
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+
+# Forbidden local state artifacts (enforced by AGENTS.md Rule 2.6)
+*.sqlite
+*.sqlite3
+*.db
+*.pkl
+chroma/
