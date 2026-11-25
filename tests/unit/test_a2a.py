@@ -15,7 +15,10 @@ def test_well_known_agent_card_endpoints() -> None:
     client = TestClient(create_app())
 
     for path in ("/.well-known/agent.json", "/.well-known/agent-card.json"):
-        response = client.get(path, headers={"x-forwarded-proto": "https", "host": "smriti.run.app"})
+        response = client.get(
+            path,
+            headers={"x-forwarded-proto": "https", "host": "smriti.run.app"},
+        )
         assert response.status_code == 200
         card = response.json()
         assert card["protocolVersion"] == "0.3.0"
