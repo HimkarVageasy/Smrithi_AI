@@ -29,16 +29,16 @@
 ### Connector 1: BigQuery (`Gemini_POC` Dataset — Financial & Order Truth)
 **Priority Rule:** Always query curated `Gemini_POC` views first. Fall back to `vw_meta_channel_monthly`, `vw_meta_campaign_monthly`, or `sales_master_data` ONLY when a curated view lacks the required grain.
 
-| View / Table | Grain & Purpose | Key Rules |
+| View / Table | Grain & Purpose | Key Columns & Rules |
 |---|---|---|
-| `ge_account_monthly` | Account x Month (spend, net revenue, net orders, ROAS, CAC, CPM, CPC, CTR) | Includes current provisional month. |
+| `ge_account_monthly` | Account x Month (`performance_spend`, `brand_spend`, `net_revenue`, `net_orders`, `performance_impressions`, `performance_clicks`, `settle_state`, `is_provisional`) | Includes current provisional month; recompute blended totals via `SUM/SUM`. |
 | `ge_account_closed_months` | Account x Closed Months only | **Mandatory** for direction/trend questions (`>= 3` closed months). |
-| `ge_month_status` | Month settlement status | Identifies `provisional`, `settling` (before 20th of next month), or `mostly settled` (after 20th). |
-| `ge_family_monthly` | Ad-side `family` x Month (e.g. `nebulizer`, `allproducts`) | Has spend, net revenue, net orders, ROAS, CAC at **ad-family** grain. |
-| `ge_product_demand_monthly` | Catalogue `Product_` x Month | Delivered demand/orders by catalogue product (no ad-level spend). |
-| `ge_city_demand_monthly` | City x Month | Total city demand across catalogue. |
-| `ge_city_product_demand_monthly` | City x `Product_` x Month | City share of a specific product (`DELHI` = Delhi rows). **Never sum across products.** |
-| `sales_master_data` | Order line-item grain | `Status_ = 'DELIVERED'` is net revenue/orders. `Combo_SKU` joins to Mixpanel `sku`. Contains PII columns—**never select customer PII**. |
+| `ge_month_status` | Month settlement status (`month`, `settle_state`, `is_provisional`, `is_latest_closed`) | Identifies `provisional`, `settling` (before 20th of next month), or `mostly settled` (after 20th). |
+| `ge_family_monthly` | Ad-side `product_family` x Month (e.g. `nebulizer`, `allproducts`) | Has `spend`, `net_revenue`, `net_orders`, `campaigns` at **ad-family** grain. |
+| `ge_product_demand_monthly` | Catalogue `catalogue_product` x Month | Delivered demand/orders (`net_orders`, `gross_orders`, `net_revenue`) by catalogue product (no ad-level spend). |
+| `ge_city_demand_monthly` | `city` x Month | Total city demand across catalogue (`net_orders`, `gross_orders`, `net_revenue`). |
+| `ge_city_product_demand_monthly` | `city` x `catalogue_product` x Month | City share of a specific product (`DELHI` = Delhi rows). **Never sum across products.** |
+| `sales_master_data` | Order line-item grain (`sale_order_code`, `Order_Date`, `Status_`, `Product_`, `Combo_SKU`, `selling_price`) | `Status_ = 'DELIVERED'` is net revenue/orders. `Combo_SKU` joins to Mixpanel `sku`. Blocks PII (`Customer_Name`, `Phone_`, `notification_email`, `address_line_1/2`, `pincode`, `employee_details`). |
 
 *(Note: As Google Ads warehouse views `ge_google_account_monthly` / `ge_blended_monthly` land in `Gemini_POC`, register them in `bigquery_poc.py` table registry.)*
 

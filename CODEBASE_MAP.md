@@ -40,8 +40,10 @@ Smrithi_AI/
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
 │   ├── guardrails/                       # Deterministic pure-Python pre-query, math, and output safety gates.
 │   │   ├── __init__.py                   # Guardrails package marker.
+│   │   ├── output_audit.py               # Regex PII scrubber (Indian phones/emails), causal/margin word blocker, and mandatory [Source · Window] check.
 │   │   └── sql_ast.py                    # sqlglot AST validator enforcing single-SELECT queries, table allowlists, PII blocks, and 500 MB scan cap.
 │   │                                     # Prevents warehouse mutations, unapproved table scans, and accidental PII leaks before BigQuery runs.
+│   ├── router.py                         # Domain-agnostic <1ms deterministic time-grain (DoD/WoW/MoM/YoY) and lookback window extractor.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
 │                                         # Shared canonical data contract across both A2A JSON-RPC messages and REST (/v1/query) calls.
 ├── domains/                              # Pluggable business use-case packs implementing DomainPlugin without modifying core/.
@@ -52,10 +54,18 @@ Smrithi_AI/
 │   │                                     # Decouples core/app.py from importing specific business domain packages directly.
 │   └── performance_marketing/            # Domain #1: AGEasy / Antara Senior Care Performance Marketing intelligence pack.
 │       ├── __init__.py                   # Package marker for the Performance Marketing domain pack.
+│       ├── collectors/                   # Strictly read-only external data connectors with timeouts and schema validation.
+│       │   ├── __init__.py               # Collectors subpackage marker.
+│       │   └── bigquery_poc.py           # Sole financial/order truth connector querying allowlisted Gemini_POC views via sqlglot + 24h BQ cache.
+│       │                                 # Fetches Account, Closed Months, Ad-Family, Product/City Demand, and non-PII daily orders concurrently.
+│       ├── demand_presenter.py           # Verified Markdown report builder for Catalogue Product/City Delivered Demand and DoD/WoW order tables.
+│       ├── intent_parser.py              # Deterministic marketing query classifier extracting focus, ad-family, and city scope in <1ms.
+│       ├── kpi_presenter.py              # Verified Account & Ad-Family report builder computing 100% of SUM/SUM ROAS, CAC, and MoM deltas in Python.
+│       │                                 # Flags provisional/settling months and stamps inline [Source: BigQuery ...] citations.
 │       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/MoM/YoY deltas, part-month clipping, and Rs formatting.
 │       │                                 # Ensures LLMs never compute ratios, average rates, or include Brand awareness spend in ROAS/CAC.
 │       ├── plugin.py                     # DomainPlugin entry point for Performance Marketing.
-│       │                                 # Orchestrates <1s refusal checks, parallel collection, Python math, and cited response rendering.
+│       │                                 # Orchestrates <1s refusal checks, parallel asyncio.gather BigQuery reads, Python math, and cited output.
 │       ├── rules.py                      # Deterministic <1s Known Refusal interceptor (Product/City/Daily/Brand ROAS, mutations) and settlement status classifier.
 │       │                                 # Turns impossible queries that previously timed out after 44 minutes into instant helpful explanations.
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
@@ -68,6 +78,7 @@ Smrithi_AI/
         ├── test_app_slice0.py            # Verifies /health, OpenAPI contract, /v1/query WIF + trace propagation, and <1s refusal short-circuiting.
         │                                 # Also enforces AGENTS.md AST invariants: <300 lines/file, zero marketing words in core/, zero local DB imports.
         ├── test_auth.py                  # Tests WIF principal case/whitespace normalization, GCP IAP prefix stripping, and 401 auth enforcement.
+        ├── test_bigquery_slice1.py       # End-to-end offline tests for Golden Scenario #1 (3m MoM), #2 (Product ROAS trap), PII blocks, and output audit.
         ├── test_codebase_map.py          # Parses CODEBASE_MAP.md and verifies every live repository file is documented and nothing stale remains.
         ├── test_known_refusals.py        # Verifies <10ms interception of Product/City/Daily/Brand ROAS & ad mutations without blocking Campaign Plans.
         ├── test_math_engine.py           # Tests SUM/SUM ratios, Brand exclusion, CPM >= 1.0 rule, <5% flat deltas, reversals, and Indian Rs formatting.

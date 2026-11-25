@@ -18,6 +18,7 @@ DEFAULT_FORBIDDEN_PII_COLUMNS: frozenset[str] = frozenset(
         "recipient_name",
         "buyer_name",
         "phone",
+        "phone_",
         "phone_number",
         "mobile",
         "mobile_number",
@@ -26,15 +27,19 @@ DEFAULT_FORBIDDEN_PII_COLUMNS: frozenset[str] = frozenset(
         "email",
         "email_address",
         "customer_email",
+        "notification_email",
         "address",
         "street_address",
         "shipping_address",
         "billing_address",
         "address_line1",
         "address_line2",
+        "address_line_1",
+        "address_line_2",
         "pincode",
         "postal_code",
         "zip_code",
+        "employee_details",
     }
 )
 
