@@ -69,11 +69,12 @@ def extract_caller_principal(
             return canonicalize_wif_principal(raw_value)
 
     if trust_cloud_run_iam_bearer:
-        auth_header = lowered_headers.get("authorization")
-        if auth_header:
-            bearer_principal = _extract_cloud_run_verified_bearer_principal(auth_header)
-            if bearer_principal:
-                return bearer_principal
+        for bearer_header in ("authorization", "x-serverless-authorization"):
+            auth_header = lowered_headers.get(bearer_header)
+            if auth_header:
+                bearer_principal = _extract_cloud_run_verified_bearer_principal(auth_header)
+                if bearer_principal:
+                    return bearer_principal
 
     if require_auth:
         raise HTTPException(

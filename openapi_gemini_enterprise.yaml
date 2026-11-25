@@ -7,8 +7,8 @@ info:
     Google Cloud Run. Invoked by Gemini Enterprise to answer deterministic KPI,
     planning, competitor, and institutional memory queries with verified citations.
 servers:
-  - url: https://REPLACE_WITH_CLOUD_RUN_SERVICE_URL
-    description: Google Cloud Run production/dev service endpoint (europe-west1)
+  - url: https://smriti-v2-dev-988560645054.europe-west1.run.app
+    description: Google Cloud Run dev service endpoint (europe-west1)
 paths:
   /v1/query:
     post:

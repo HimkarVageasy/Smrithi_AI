@@ -32,7 +32,9 @@ Smrithi_AI/
 ├── pyproject.toml                        # Python 3.12+ package manifest, dependencies (FastAPI, Pydantic v2, sqlglot), pytest, and Ruff settings.
 ├── core/                                 # 100% domain-agnostic platform engine (reusable across Marketing, CRM, Ops, Finance—zero marketing terms).
 │   ├── __init__.py                       # Marks core as the shared platform package; kept free of domain imports.
-│   ├── app.py                            # FastAPI gateway (/health, POST /v1/query) bridging Gemini Enterprise OpenAPI calls to DomainPlugins.
+│   ├── a2a.py                            # Agent2Agent (A2A v0.3.0) Agent Card + JSON-RPC message/send adapter for Gemini Enterprise direct Cloud Run routing.
+│   │                                     # Eliminates extra Dialogflow/LLM wrapper hops while sharing the exact same verified query pipeline.
+│   ├── app.py                            # FastAPI gateway (/health, A2A /, POST /v1/query) bridging Gemini Enterprise calls to DomainPlugins.
 │   │                                     # Stamps GCP Cloud Trace IDs, normalizes caller identity, and short-circuits Known Refusals in <1s.
 │   ├── auth.py                           # Workforce Identity Federation (ge-pilot-wif) extractor and .strip().lower() principal normalizer.
 │   │                                     # Prevents case-mismatch permission/memory bugs and enforces 401 rejection in production mode.
@@ -56,6 +58,7 @@ Smrithi_AI/
     ├── __init__.py                       # Root test package marker.
     └── unit/                             # Fast, deterministic unit & architectural guardrail tests.
         ├── __init__.py                   # Unit test subpackage marker.
+        ├── test_a2a.py                   # Verifies A2A /.well-known/agent.json discovery, JSON-RPC message/send, and X-Serverless-Authorization OIDC auth.
         ├── test_app_slice0.py            # Verifies /health, OpenAPI contract, /v1/query WIF + trace propagation, and <1s refusal short-circuiting.
         │                                 # Also enforces AGENTS.md AST invariants: <300 lines/file, zero marketing words in core/, zero local DB imports.
         ├── test_auth.py                  # Tests WIF principal case/whitespace normalization, GCP IAP prefix stripping, and 401 auth enforcement.
