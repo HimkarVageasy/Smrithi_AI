@@ -24,6 +24,7 @@ class AppConfig(BaseModel):
     version: str = "0.1.0"
     default_domain: str | None = None
     require_auth: bool = False
+    trust_cloud_run_iam_bearer: bool = False
 
     @classmethod
     def from_env(cls) -> AppConfig:
@@ -33,6 +34,7 @@ class AppConfig(BaseModel):
         )
         raw_default_domain = os.getenv("SMRITI_DEFAULT_DOMAIN")
         default_domain = raw_default_domain.strip() if raw_default_domain else None
+        on_cloud_run = bool(os.getenv("K_SERVICE", "").strip())
 
         return cls(
             env=env_val,
@@ -42,5 +44,9 @@ class AppConfig(BaseModel):
             require_auth=_parse_bool(
                 os.getenv("SMRITI_REQUIRE_AUTH"),
                 default=(env_val == "prod"),
+            ),
+            trust_cloud_run_iam_bearer=_parse_bool(
+                os.getenv("SMRITI_TRUST_CLOUD_RUN_BEARER"),
+                default=on_cloud_run,
             ),
         )

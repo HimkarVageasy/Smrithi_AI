@@ -27,6 +27,8 @@ Smrithi_AI/
 ├── README.md                             # Repository landing page with core architectural pillars, spec links, and quick-start local test commands.
 ├── ROADMAP.md                            # Incremental vertical-slice delivery plan (Slice 0 through Slice 5 + Domain #2 expansion).
 │                                         # Ensures each end-to-end capability is unit-tested and verified live before starting the next slice.
+├── openapi_gemini_enterprise.yaml        # Strict OpenAPI 3.0.3 tool specification ready to paste into Gemini Enterprise (Agents > Smriti-v2-Dev).
+│                                         # Avoids FastAPI OpenAPI 3.1.0 incompatibilities with Google's OpenAPI tool validator.
 ├── pyproject.toml                        # Python 3.12+ package manifest, dependencies (FastAPI, Pydantic v2, sqlglot), pytest, and Ruff settings.
 ├── core/                                 # 100% domain-agnostic platform engine (reusable across Marketing, CRM, Ops, Finance—zero marketing terms).
 │   ├── __init__.py                       # Marks core as the shared platform package; kept free of domain imports.

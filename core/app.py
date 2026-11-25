@@ -76,6 +76,7 @@ def create_app(
         caller_wif = extract_caller_principal(
             request.headers,
             require_auth=cfg.require_auth,
+            trust_cloud_run_iam_bearer=cfg.trust_cloud_run_iam_bearer,
         )
 
         try:
