@@ -67,7 +67,9 @@
 
 ## 4. How We Build (Workflow Rules for Humans & AI Agents)
 
-1. **One Vertical Slice at a Time:** Build, unit-test, and verify one end-to-end slice before starting the next (see `docs/ROADMAP.md`). Never generate untested scaffolding across 20 files at once.
+1. **One Vertical Slice at a Time:** Build, unit-test, and verify one end-to-end slice before starting the next (see `ROADMAP.md`). Never generate untested scaffolding across 20 files at once.
 2. **No God Files:** Keep every module focused (`< 300 lines` target). Keep `core/` free of any marketing-specific words (`ROAS`, `Nebulizer`, `Meta` belong strictly inside `domains/performance_marketing/`).
 3. **Every Connector Gets Offline Unit Tests First:** Mock external HTTP/BigQuery responses with realistic fixtures in `tests/unit/` so the entire test suite runs in `< 5 seconds` with zero cloud credentials required.
-4. **Docs Stay Synced:** If a schema, business rule, or known refusal changes, update `docs/DOMAIN_PERF_MARKETING.md` in the same commit.
+4. **Docs & Codebase Map Stay 100% Synced:** Whenever a schema, architecture decision, business rule, or file changes, update `CODEBASE_MAP.md`, `DOMAIN_PERF_MARKETING.md`, and affected design docs in the same commit—zero stale or contradictory docs.
+5. **Zero Dead Baggage (Ask Before Deleting):** Never keep unused, duplicate, or superseded files in the repository. Before deleting any file, ALWAYS ask the user first and state: (a) what it was created for, (b) why it is no longer useful, and (c) why deleting it keeps the codebase clean.
+6. **Branch-Based Development (`main` Is Deployable):** Because `main` auto-deploys to Google Cloud Run, develop every new slice, feature, or fix on a dedicated branch (e.g., `slice-1-bigquery-math`, `feat/<topic>`, `fix/<topic>`) and merge to `main` only after offline tests and review pass.

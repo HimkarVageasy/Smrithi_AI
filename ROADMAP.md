@@ -4,11 +4,11 @@
 
 ---
 
-## Slice 0: Clean Repo Bootstrap & Core Skeleton (Day 1)
-- Initialize fresh Git repo (`smriti-v2/`) with `pyproject.toml`, `Dockerfile`, `.env.example`, and this 4-file Context Pack (`AGENTS.md`, `docs/ARCHITECTURE.md`, `docs/DOMAIN_PERF_MARKETING.md`, `docs/ROADMAP.md`).
-- Build `core/app.py` (FastAPI `/health` + `/v1/query`), `core/auth.py` (WIF `.lower()` identity normalizer), and `DomainPlugin` base interface.
-- Deploy "Hello Smriti v2" container to **Google Cloud Run** (`eu` region) and connect it as an OpenAPI Tool to a test agent (`Smriti-v2-Dev`) in **Gemini Enterprise** so both engineers can co-edit via Git from Day 1.
-- **Done When:** Asking `Smriti-v2-Dev` in Gemini Enterprise chat hits Cloud Run and returns a 1-second verified ping with your normalized user ID.
+## Slice 0: Clean Repo Bootstrap & Core Skeleton — ✅ COMPLETED (Nov 25, 2026)
+- Initialized GitHub repo (`HimkarVageasy/Smrithi_AI`) with `pyproject.toml`, `Dockerfile`, `.env.example`, `.gitignore`, GitHub Actions CI, `CODEBASE_MAP.md`, and the synchronized root Specification Pack.
+- Built `core/app.py` (`/health`, `POST /v1/query`), `core/a2a.py` (A2A v0.3.0 `/.well-known/agent.json` + JSON-RPC `message/send`), `core/auth.py` (WIF & Cloud Run IAM OIDC `.strip().lower()` identity normalizer), and `DomainPlugin` base interface (`24/24` offline unit tests passing in `< 2.5s`).
+- Deployed `smriti-v2-dev` (`https://smriti-v2-dev-988560645054.europe-west1.run.app`) with Continuous Deployment from `main` on **Google Cloud Run** (`europe-west1`) and connected it via **Custom agent via A2A** (`Smriti-v2-Dev`) in **Gemini Enterprise**.
+- **Verified Live:** `Ping Smriti v2!` in Gemini Enterprise returned a 1-second verified ping with normalized identity, GCP Cloud Trace ID, and IST citation.
 
 ---
 

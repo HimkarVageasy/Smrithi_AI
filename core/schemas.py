@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 class SmritiQueryRequest(BaseModel):
-    """Inbound query payload from Gemini Enterprise OpenAPI tool invocation."""
+    """Canonical inbound query payload shared by A2A JSON-RPC and REST (/v1/query)."""
 
     question: str = Field(
         ...,

@@ -1,14 +1,14 @@
 # Smriti v2 — Final Low-Level Design (`LOW_LEVEL_DESIGN.md`)
 
-> **Updated:** Nov 23, 2026 (Synchronized with Production v2 Context Pack)
+> **Updated:** Nov 25, 2026 (Synchronized with Live Slice 0 Cloud Run + A2A Deployment)
 > **Runtime:** Python 3.12+, FastAPI, Pydantic v2, `google-cloud-bigquery`, `httpx` (`asyncio`), `sqlglot`, Google GenAI SDK (`google-genai`)
-> **Deployment:** Google Cloud Run (`europe-west1` / `eu`), connected via OpenAPI Tool to Gemini Enterprise (`Apps > pilot > Agents > Smriti`)
+> **Deployment:** Google Cloud Run (`europe-west1` / `eu`), connected directly via **Agent2Agent (A2A v0.3.0)** protocol (`core/a2a.py`) + REST (`POST /v1/query`) to Gemini Enterprise (`Apps > pilot > Agents`)
 
 ---
 
-## 1. Gemini Enterprise <-> Cloud Run API Contract (`core/app.py`)
+## 1. Gemini Enterprise <-> Cloud Run API Contract (`core/app.py` & `core/a2a.py`)
 
-Gemini Enterprise invokes Smriti v2 via a single authenticated HTTPS POST endpoint (`OpenAPI 3.0` tool specification registered under `Agents > Smriti`).
+Gemini Enterprise invokes Smriti v2 directly over HTTPS using Google's native **Custom agent via A2A** bridge (`GET /.well-known/agent.json` discovery + `POST /` JSON-RPC 2.0 `message/send`), authenticated at the Cloud Run IAM perimeter via `X-Serverless-Authorization` OIDC (`roles/run.invoker` granted to the Discovery Engine service agent). For automated golden evaluations and direct HTTP testing, `POST /v1/query` exposes the exact same pipeline over typed REST.
 
 ### Request & Response Schemas (`core/schemas.py`)
 ```python

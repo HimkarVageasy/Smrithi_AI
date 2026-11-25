@@ -23,12 +23,10 @@ Smrithi_AI/
 ├── Dockerfile                            # Hardened, non-root Python 3.12 container definition for stateless deployment on Google Cloud Run.
 ├── HIGH_LEVEL_DESIGN.md                  # Executive architecture overview showing how Gemini Enterprise chat connects to the Cloud Run Python brain.
 │                                         # Clarifies the exact boundary of every connector and specialist Python module for stakeholders.
-├── LOW_LEVEL_DESIGN.md                   # Detailed implementation blueprint: OpenAPI schemas, DomainPlugin contract, BigQuery DDL, and 3 guardrail gates.
+├── LOW_LEVEL_DESIGN.md                   # Detailed implementation blueprint: A2A & REST contracts, DomainPlugin protocol, BigQuery DDL, and 3 guardrail gates.
 ├── README.md                             # Repository landing page with core architectural pillars, spec links, and quick-start local test commands.
 ├── ROADMAP.md                            # Incremental vertical-slice delivery plan (Slice 0 through Slice 5 + Domain #2 expansion).
 │                                         # Ensures each end-to-end capability is unit-tested and verified live before starting the next slice.
-├── openapi_gemini_enterprise.yaml        # Strict OpenAPI 3.0.3 tool specification ready to paste into Gemini Enterprise (Agents > Smriti-v2-Dev).
-│                                         # Avoids FastAPI OpenAPI 3.1.0 incompatibilities with Google's OpenAPI tool validator.
 ├── pyproject.toml                        # Python 3.12+ package manifest, dependencies (FastAPI, Pydantic v2, sqlglot), pytest, and Ruff settings.
 ├── core/                                 # 100% domain-agnostic platform engine (reusable across Marketing, CRM, Ops, Finance—zero marketing terms).
 │   ├── __init__.py                       # Marks core as the shared platform package; kept free of domain imports.
@@ -36,12 +34,12 @@ Smrithi_AI/
 │   │                                     # Eliminates extra Dialogflow/LLM wrapper hops while sharing the exact same verified query pipeline.
 │   ├── app.py                            # FastAPI gateway (/health, A2A /, POST /v1/query) bridging Gemini Enterprise calls to DomainPlugins.
 │   │                                     # Stamps GCP Cloud Trace IDs, normalizes caller identity, and short-circuits Known Refusals in <1s.
-│   ├── auth.py                           # Workforce Identity Federation (ge-pilot-wif) extractor and .strip().lower() principal normalizer.
+│   ├── auth.py                           # Workforce Identity & Cloud Run IAM OIDC extractor (X-Serverless-Authorization / Bearer) with .strip().lower() normalization.
 │   │                                     # Prevents case-mismatch permission/memory bugs and enforces 401 rejection in production mode.
 │   ├── config.py                         # Immutable AppConfig model reading runtime flags strictly from environment variables.
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
-│                                         # Generates the exact OpenAPI 3.0 schema imported by Google Gemini Enterprise (Agents > Smriti).
+│                                         # Shared canonical data contract across both A2A JSON-RPC messages and REST (/v1/query) calls.
 ├── domains/                              # Pluggable business use-case packs implementing DomainPlugin without modifying core/.
 │   ├── __init__.py                       # Root package for all pluggable company domain modules.
 │   ├── base.py                           # Defines the runtime-checkable DomainPlugin protocol and in-memory DomainRegistry.

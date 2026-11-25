@@ -19,7 +19,7 @@
 ## 2. Core Architectural Principles
 
 1. **90% Deterministic Python, 10% LLM:** LLMs classify intent and write plain-English narratives. LLMs **never** calculate ratios, sum rows, guess years, or run unconstrained tool loops.
-2. **Gemini Enterprise as the Face, Cloud Run as the Brain:** Marketing & business teams use the clean Gemini Enterprise web chat (`Agents > Smriti`). Behind it, a single HTTPS/ADK tool call invokes our FastAPI/Python engine on Google Cloud Run.
+2. **Gemini Enterprise as the Face, Cloud Run as the Brain:** Marketing & business teams use the clean Gemini Enterprise web chat (`Agents > Smriti`). Behind it, a direct HTTPS Agent2Agent (`A2A v0.3.0` JSON-RPC) call invokes our FastAPI/Python engine on Google Cloud Run with zero wrapper-LLM hops.
 3. **Parallel I/O Over Sequential Agent Loops:** All independent data reads (BigQuery, Mixpanel, Meta Ads, Google Ads, Memory Store) execute concurrently via `asyncio.gather` with hard per-connector timeouts (8s), eliminating 44-minute `DEADLINE_EXCEEDED` failures.
 4. **Core Platform vs. Domain Packs:** Authentication, parallel execution, guardrails, citations, and **Smriti Memory** live in `core/`. Business-specific SQL views, connectors, KPI formulas, and refusal rules live in `domains/<domain_name>/`.
 5. **Governed Memory ("Smriti"), Not Raw Chat Dumping:** Chat questions read organizational memory automatically, but **writing** into company memory requires explicit structure + verification so hallucinations never become "facts."
@@ -39,11 +39,11 @@
                          v
   +------------------------------------------------------------------------------+
   | GEMINI ENTERPRISE PORTAL (vertexaisearch.cloud.google.com)                   |
-  |  - Agents > Smriti (Thin Wrapper Agent)                                      |
+  |  - Agents > Smriti (Direct Custom Agent via A2A)                             |
   |  - Built-in Session History, Pinning, Access Control & GCP Cloud Traces      |
   +--------------------------------------+---------------------------------------+
                                          |
-                                         | HTTPS / OIDC Authenticated Tool Call
+                                         | Direct HTTPS A2A JSON-RPC + Cloud Run IAM OIDC
                                          v
 ====================================================================================
  LAYER 2: SMRITI CORE ENGINE (`core/` — Domain-Agnostic, Hosted on Cloud Run)
@@ -212,20 +212,23 @@ class DomainPlugin(Protocol):
 
 ---
 
-## 8. Proposed Clean Repository Structure (`smriti-v2/`)
+## 8. Target Repository Structure (`Smrithi_AI/` — Live Map in `CODEBASE_MAP.md`)
 
 ```text
-smriti-v2/
+Smrithi_AI/
 ├── AGENTS.md                        # AI & developer constitution (coding + math invariants)
+├── CODEBASE_MAP.md                  # CI-enforced live file map with 1–2 line descriptions
+├── ARCHITECTURE.md                  # This document
+├── HIGH_LEVEL_DESIGN.md             # Executive topology & connector boundaries
+├── LOW_LEVEL_DESIGN.md              # Schemas, DomainPlugin contract, BigQuery DDL, guardrails
+├── DOMAIN_PERF_MARKETING.md         # Exact Gemini_POC schemas, 28 rules, Mixpanel/Meta specs
+├── ROADMAP.md                       # Vertical-slice build plan (Slice 0 -> Slice 5)
 ├── pyproject.toml                   # Python 3.12+, FastAPI, Pydantic v2, google-cloud-bigquery, sqlglot
 ├── Dockerfile                       # Cloud Run production container
-├── docs/
-│   ├── ARCHITECTURE.md              # This document
-│   ├── DOMAIN_PERF_MARKETING.md     # Exact Gemini_POC schemas, 28 rules, Mixpanel/Meta specs
-│   └── ROADMAP.md                   # Vertical-slice build plan
 ├── core/                            # REUSABLE ACROSS ALL COMPANY USE CASES
-│   ├── app.py                       # FastAPI entry point + GE OpenAPI / ADK endpoints
-│   ├── auth.py                      # OIDC + WIF principal normalization
+│   ├── a2a.py                       # Gemini Enterprise Agent2Agent (A2A v0.3.0) adapter
+│   ├── app.py                       # FastAPI gateway (/health, A2A /, POST /v1/query)
+│   ├── auth.py                      # Cloud Run IAM OIDC + WIF principal normalization
 │   ├── router.py                    # Fast intent & domain classifier
 │   ├── runner.py                    # Parallel asyncio collector with timeouts & circuit breakers
 │   ├── memory/                      # "Smriti" Knowledge Retention (L1/L2/L3 chunking + retrieval)

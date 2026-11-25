@@ -18,7 +18,7 @@
 |   - Clean Google UI, conversation history, GCP Cloud Traces                       |
 +-----------------------------------------+-----------------------------------------+
                                           |
-                                          | 1 Single Secure API Call (HTTPS / OIDC)
+                                          | 1 Direct A2A JSON-RPC Call (HTTPS / Cloud Run IAM OIDC)
                                           v
 +-----------------------------------------------------------------------------------+
 |  2. HIGH-CODE BRAIN — Python Engine on Google Cloud Run (`core/`)                 |
