@@ -9,6 +9,7 @@ High-code, multi-domain **Enterprise Intelligence & Organizational Memory** plat
 - **Pluggable Domain Packs:** `core/` is 100% domain-agnostic; business domains plug in via `DomainPlugin` under `domains/` (launching with **Domain #1: `performance_marketing`**).
 
 ## Specification Pack
+- [`CODEBASE_MAP.md`](./CODEBASE_MAP.md) — Live Annotated Directory Tree (every file + its role & value, CI-verified)
 - [`AGENTS.md`](./AGENTS.md) — Engineering, Security & Math Constitution
 - [`HIGH_LEVEL_DESIGN.md`](./HIGH_LEVEL_DESIGN.md) — Executive Topology & Specialist Roles
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — System Architecture, Memory Hierarchy & Execution Flows
