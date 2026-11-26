@@ -87,3 +87,30 @@ def test_cross_source_cvr_m6_labeling() -> None:
     zero = compute_cross_source_cvr(bq_delivered_orders=5, mixpanel_paid_sessions=0)
     assert zero["cvr_pct"] is None
     assert zero["display"] == "No sessions recorded in period"
+
+
+@pytest.mark.asyncio
+async def test_mixpanel_semaphore_caps_concurrency_below_5_limit() -> None:
+    import asyncio
+
+    active = 0
+    peak_active = 0
+
+    async def _tracked_fetcher(
+        step: str, start: date, end: date, sku: str | None, channel: PaidChannelFilter
+    ) -> int:
+        nonlocal active, peak_active
+        active += 1
+        peak_active = max(peak_active, active)
+        await asyncio.sleep(0.02)
+        active -= 1
+        return 10
+
+    collector = MixpanelLiveCollector(step_fetcher=_tracked_fetcher)
+    # 4 SKUs x 3 steps = 12 calls -> semaphore must cap concurrent calls at <= 4
+    await collector.fetch_3step_funnel(
+        ["SKU1", "SKU2", "SKU3", "SKU4"],
+        date(2026, 10, 1),
+        date(2026, 10, 28),
+    )
+    assert peak_active <= MixpanelLiveCollector.MAX_CONCURRENT_REQUESTS

@@ -72,6 +72,9 @@ async def run_with_timeouts(tasks: Sequence[CollectorTask]) -> ParallelRunResult
             bundle.degraded_sources.append(f"{name} (timed out > {spec.timeout_seconds:.1f}s)")
         elif isinstance(exc, ConnectorUnavailableError):
             bundle.degraded_sources.append(f"{name} ({exc})")
+        elif hasattr(exc, "response") and getattr(exc.response, "status_code", None):
+            code = exc.response.status_code
+            bundle.degraded_sources.append(f"{name} (HTTP {code})")
         else:
             bundle.degraded_sources.append(f"{name} ({type(exc).__name__})")
 

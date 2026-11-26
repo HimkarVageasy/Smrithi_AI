@@ -68,13 +68,7 @@ class MixpanelLiveCollector:
     STEP_PRODUCT_VIEW: str = "Page Viewed"
     STEP_BEGIN_CHECKOUT: str = "mp_begin_checkout"
     STEP_PAYMENT_OPTIONS: str = "mp_navigation_payment_options"
-    _PAGE_VIEW_RAW_CANDIDATES: tuple[str, ...] = (
-        "Page Viewed",
-        "mp_page_view",
-        "mp_page_viewed",
-        "page_view",
-    )
-    _PRODUCT_VIEW_FALLBACK_CANDIDATES: tuple[str, ...] = ("Product Viewed", "mp_product_view")
+    MAX_CONCURRENT_REQUESTS: int = 4  # Mixpanel Query API enforces <=5 concurrent calls/project
 
     def __init__(
         self,
@@ -96,6 +90,7 @@ class MixpanelLiveCollector:
         ).rstrip("/")
         self._cache = cache or build_default_cache()
         self._step_fetcher = step_fetcher
+        self._sem = asyncio.Semaphore(self.MAX_CONCURRENT_REQUESTS)
 
     def assert_event_allowed(self, event_name: str) -> None:
         """Block Purchase/Order/Revenue events (orders come strictly from BigQuery)."""
@@ -154,14 +149,24 @@ class MixpanelLiveCollector:
             "type": "unique",
             "where": where_expr,
         }
-        resp = await client.get(
-            f"{self._api_host}/api/query/segmentation",
-            params=params,
-            auth=(self._username, self._secret),
-        )
-        resp.raise_for_status()
-        series = resp.json().get("data", {}).get("values", {}).get(api_event, {})
-        return sum(int(v or 0) for v in series.values()) if isinstance(series, dict) else 0
+        async with self._sem:
+            resp = await client.get(
+                f"{self._api_host}/api/query/segmentation",
+                params=params,
+                auth=(self._username, self._secret),
+            )
+            if resp.status_code == 429:
+                await asyncio.sleep(0.8)
+                resp = await client.get(
+                    f"{self._api_host}/api/query/segmentation",
+                    params=params,
+                    auth=(self._username, self._secret),
+                )
+            if resp.status_code == 400:
+                return 0
+            resp.raise_for_status()
+            series = resp.json().get("data", {}).get("values", {}).get(api_event, {})
+            return sum(int(v or 0) for v in series.values()) if isinstance(series, dict) else 0
 
     async def _fetch_segmentation_unique_count(
         self,
@@ -173,7 +178,8 @@ class MixpanelLiveCollector:
     ) -> int:
         self.assert_event_allowed(step_name)
         if self._step_fetcher is not None:
-            return await self._step_fetcher(step_name, start, end, sku, channel)
+            async with self._sem:
+                return await self._step_fetcher(step_name, start, end, sku, channel)
 
         if not (self._project_id and self._username and self._secret):
             raise ConnectorUnavailableError("Mixpanel credentials not configured")
@@ -187,29 +193,21 @@ class MixpanelLiveCollector:
                     client, step_name, where_expr, start, end
                 )
 
+            # Query primary event first (keeps concurrent Mixpanel calls at 3 <= 5 limit)
             primary_where = self._build_where_expression(
                 include_products_variant=True, sku=sku, channel=channel
             )
-            primary_counts = await asyncio.gather(
-                *(
-                    self._query_single_raw_event(client, ev, primary_where, start, end)
-                    for ev in self._PAGE_VIEW_RAW_CANDIDATES
-                )
-            )
-            best = max(primary_counts, default=0)
-            if best > 0:
-                return best
+            for ev in ("Page Viewed", "mp_page_view"):
+                cnt = await self._query_single_raw_event(client, ev, primary_where, start, end)
+                if cnt > 0:
+                    return cnt
 
             fb_where = self._build_where_expression(
                 include_products_variant=False, sku=sku, channel=channel
             )
-            fb_counts = await asyncio.gather(
-                *(
-                    self._query_single_raw_event(client, ev, fb_where, start, end)
-                    for ev in self._PRODUCT_VIEW_FALLBACK_CANDIDATES
-                )
+            return await self._query_single_raw_event(
+                client, "Product Viewed", fb_where, start, end
             )
-            return max(fb_counts, default=0)
 
     async def _sum_across_skus(
         self,
