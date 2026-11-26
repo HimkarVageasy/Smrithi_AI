@@ -114,9 +114,9 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
     for city in _KNOWN_CITIES:
         if re.search(rf"\b{re.escape(city)}\b", lowered):
             matched_city = (
-                "BENGALURU"
-                if city == "bangalore"
-                else ("GURUGRAM" if city == "gurgaon" else city.upper())
+                "BANGALORE"
+                if city == "bengaluru"
+                else ("GURGAON" if city == "gurugram" else city.upper())
             )
             break
 

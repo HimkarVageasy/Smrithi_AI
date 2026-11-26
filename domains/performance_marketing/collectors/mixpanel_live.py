@@ -28,23 +28,19 @@ def compute_cross_source_cvr(
     """Compute M6 Cross-source conversion (`BigQuery Delivered Orders / Mixpanel Sessions`)."""
     if bq_delivered_orders < 0 or mixpanel_paid_sessions < 0:
         raise MixpanelRuleViolation("Order and session counts must be non-negative.")
+    label = "Cross-source conversion (BigQuery Meta Delivered Orders / Mixpanel Paid Meta Sessions)"
     if mixpanel_paid_sessions == 0:
         return {
-            "label": "Cross-source conversion (BigQuery Delivered Orders / Mixpanel Sessions)",
-            "bq_delivered_orders": bq_delivered_orders,
-            "mixpanel_sessions": 0,
-            "cvr_pct": None,
-            "display": "No sessions recorded in period",
+            "label": label, "bq_delivered_orders": bq_delivered_orders,
+            "mixpanel_sessions": 0, "cvr_pct": None, "display": "No sessions recorded in period",
         }
     pct = round((bq_delivered_orders / mixpanel_paid_sessions) * 100.0, 2)
     return {
-        "label": "Cross-source conversion (BigQuery Delivered Orders / Mixpanel Sessions)",
-        "bq_delivered_orders": bq_delivered_orders,
-        "mixpanel_sessions": mixpanel_paid_sessions,
-        "cvr_pct": pct,
+        "label": label, "bq_delivered_orders": bq_delivered_orders,
+        "mixpanel_sessions": mixpanel_paid_sessions, "cvr_pct": pct,
         "display": (
-            f"{pct:.2f}% ({bq_delivered_orders:,} BQ delivered / "
-            f"{mixpanel_paid_sessions:,} MP sessions)"
+            f"{pct:.2f}% ({bq_delivered_orders:,} BQ Meta delivered / "
+            f"{mixpanel_paid_sessions:,} MP paid Meta sessions)"
         ),
     }
 

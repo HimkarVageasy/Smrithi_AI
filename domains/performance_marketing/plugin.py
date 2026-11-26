@@ -72,7 +72,10 @@ class PerformanceMarketingPlugin:
             start_28d = end_yday - timedelta(days=27)
             tasks = [
                 _task("bq_account", lambda: self._bq.fetch_account_monthly(limit_months=3)),
-                _task("bq_daily_orders", lambda: self._bq.fetch_recent_daily_orders(days=28)),
+                _task(
+                    "bq_daily_orders",
+                    lambda: self._bq.fetch_recent_daily_orders(days=28, paid_meta_only=True),
+                ),
                 _task(
                     "Mixpanel Live",
                     lambda: self._mixpanel.fetch_3step_funnel(

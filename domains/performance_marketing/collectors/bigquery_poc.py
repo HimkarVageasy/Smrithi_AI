@@ -15,13 +15,7 @@ AsyncQueryExecutor = Callable[[str, Sequence[QueryParamTuple]], Awaitable[list[d
 
 
 def _serialize_row(raw_row: dict[str, Any]) -> dict[str, Any]:
-    out: dict[str, Any] = {}
-    for key, val in raw_row.items():
-        if isinstance(val, date):
-            out[key] = val.isoformat()
-        else:
-            out[key] = val
-    return out
+    return {k: (v.isoformat() if isinstance(v, date) else v) for k, v in raw_row.items()}
 
 
 class BigQueryPocCollector:
@@ -29,16 +23,10 @@ class BigQueryPocCollector:
 
     BASE_VIEWS: frozenset[str] = frozenset(
         {
-            "ge_account_monthly",
-            "ge_account_closed_months",
-            "ge_month_status",
-            "ge_family_monthly",
-            "ge_product_demand_monthly",
-            "ge_city_demand_monthly",
-            "ge_city_product_demand_monthly",
-            "vw_meta_channel_monthly",
-            "vw_meta_campaign_monthly",
-            "sales_master_data",
+            "ge_account_monthly", "ge_account_closed_months", "ge_month_status",
+            "ge_family_monthly", "ge_product_demand_monthly", "ge_city_demand_monthly",
+            "ge_city_product_demand_monthly", "vw_meta_channel_monthly",
+            "vw_meta_campaign_monthly", "sales_master_data",
         }
     )
 
@@ -267,17 +255,33 @@ class BigQueryPocCollector:
 
         return {"product_demand": product_rows, "city_demand": city_rows}
 
-    async def fetch_recent_daily_orders(self, *, days: int = 14) -> list[dict[str, Any]]:
-        """Fetch safe non-PII daily order counts (`sales_master_data`) for DoD/WoW comparisons."""
+    async def fetch_recent_daily_orders(
+        self,
+        *,
+        days: int = 14,
+        paid_meta_only: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Fetch safe non-PII daily order counts (`sales_master_data`) for DoD/WoW or Meta CVR."""
         sales_tbl = self._table_ref("sales_master_data")
+        meta_clause = (
+            "AND (LOWER(TRIM(utm_medium)) IN ('meta', 'fb', 'ig', 'paid_social') "
+            "OR LOWER(TRIM(utm_source)) IN ('meta', 'facebook', 'fb', 'ig') "
+            "OR LOWER(TRIM(Order_Source_Bucket)) LIKE '%meta%' "
+            "OR LOWER(TRIM(order_source)) LIKE '%meta%')"
+            if paid_meta_only
+            else ""
+        )
         sql = f"""
         SELECT
             Order_Date AS order_date,
             COUNT(DISTINCT sale_order_code) AS gross_orders,
             COUNT(DISTINCT IF(UPPER(Status_) = 'DELIVERED', sale_order_code, NULL)) AS net_orders,
-            SUM(IF(UPPER(Status_) = 'DELIVERED', COALESCE(selling_price, 0.0), 0.0)) AS net_revenue
+            SUM(
+                IF(UPPER(Status_) = 'DELIVERED', COALESCE(selling_price_Exc_GST, 0.0), 0.0)
+            ) AS net_revenue
         FROM {sales_tbl}
         WHERE Order_Date >= DATE_SUB(CURRENT_DATE('Asia/Kolkata'), INTERVAL @days DAY)
+        {meta_clause}
         GROUP BY Order_Date
         ORDER BY Order_Date ASC
         """
