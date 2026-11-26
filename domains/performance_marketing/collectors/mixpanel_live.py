@@ -49,6 +49,14 @@ def compute_cross_source_cvr(
     }
 
 
+def _fmt_step_rate(numerator: int | None, denominator: int | None) -> str:
+    if numerator is None or denominator is None:
+        return "N/A (pre-cutoff)"
+    if denominator <= 0:
+        return "No sessions recorded in period"
+    return f"{(numerator / denominator) * 100.0:.2f}%"
+
+
 class MixpanelLiveCollector:
     """Enforces M1..M6 UTM, 1-SKU-per-call fan-out, and 24 Feb / 18 Sep 2026 date boundaries."""
 
@@ -57,9 +65,16 @@ class MixpanelLiveCollector:
     FORBIDDEN_EVENTS: frozenset[str] = frozenset(
         {"Purchase", "Order Placed", "product_purchase", "mp_order_complete", "Revenue"}
     )
-    STEP_PRODUCT_VIEW: str = "Product Page View"
+    STEP_PRODUCT_VIEW: str = "Page Viewed"
     STEP_BEGIN_CHECKOUT: str = "mp_begin_checkout"
     STEP_PAYMENT_OPTIONS: str = "mp_navigation_payment_options"
+    _PAGE_VIEW_RAW_CANDIDATES: tuple[str, ...] = (
+        "Page Viewed",
+        "mp_page_view",
+        "mp_page_viewed",
+        "page_view",
+    )
+    _PRODUCT_VIEW_FALLBACK_CANDIDATES: tuple[str, ...] = ("Product Viewed", "mp_product_view")
 
     def __init__(
         self,
@@ -95,7 +110,7 @@ class MixpanelLiveCollector:
     @staticmethod
     def _build_where_expression(
         *,
-        step_name: str,
+        include_products_variant: bool,
         sku: str | None,
         channel: PaidChannelFilter,
     ) -> str:
@@ -116,12 +131,37 @@ class MixpanelLiveCollector:
         else:
             clauses.append('lower(properties["utm_source"]) == "paid"')
 
-        if step_name == MixpanelLiveCollector.STEP_PRODUCT_VIEW:
-            clauses.append('properties["page_variant"] == "products"')
+        if include_products_variant:
+            clauses.append('lower(properties["page_variant"]) == "products"')
         if sku:
             safe_sku = sku.replace('"', "")
             clauses.append(f'properties["sku"] == "{safe_sku}"')
         return " and ".join(clauses)
+
+    async def _query_single_raw_event(
+        self,
+        client: httpx.AsyncClient,
+        api_event: str,
+        where_expr: str,
+        start: date,
+        end: date,
+    ) -> int:
+        params = {
+            "project_id": self._project_id,
+            "event": api_event,
+            "from_date": start.isoformat(),
+            "to_date": end.isoformat(),
+            "type": "unique",
+            "where": where_expr,
+        }
+        resp = await client.get(
+            f"{self._api_host}/api/query/segmentation",
+            params=params,
+            auth=(self._username, self._secret),
+        )
+        resp.raise_for_status()
+        series = resp.json().get("data", {}).get("values", {}).get(api_event, {})
+        return sum(int(v or 0) for v in series.values()) if isinstance(series, dict) else 0
 
     async def _fetch_segmentation_unique_count(
         self,
@@ -138,29 +178,38 @@ class MixpanelLiveCollector:
         if not (self._project_id and self._username and self._secret):
             raise ConnectorUnavailableError("Mixpanel credentials not configured")
 
-        api_event = "$mp_web_page_view" if step_name == self.STEP_PRODUCT_VIEW else step_name
-        where_expr = self._build_where_expression(step_name=step_name, sku=sku, channel=channel)
-        params = {
-            "project_id": self._project_id,
-            "event": api_event,
-            "from_date": start.isoformat(),
-            "to_date": end.isoformat(),
-            "type": "unique",
-            "where": where_expr,
-        }
         async with httpx.AsyncClient(timeout=7.0) as client:
-            resp = await client.get(
-                f"{self._api_host}/api/query/segmentation",
-                params=params,
-                auth=(self._username, self._secret),
-            )
-            resp.raise_for_status()
-            payload = resp.json()
+            if step_name != self.STEP_PRODUCT_VIEW:
+                where_expr = self._build_where_expression(
+                    include_products_variant=False, sku=sku, channel=channel
+                )
+                return await self._query_single_raw_event(
+                    client, step_name, where_expr, start, end
+                )
 
-        series = payload.get("data", {}).get("values", {}).get(api_event, {})
-        if isinstance(series, dict):
-            return sum(int(v or 0) for v in series.values())
-        return 0
+            primary_where = self._build_where_expression(
+                include_products_variant=True, sku=sku, channel=channel
+            )
+            primary_counts = await asyncio.gather(
+                *(
+                    self._query_single_raw_event(client, ev, primary_where, start, end)
+                    for ev in self._PAGE_VIEW_RAW_CANDIDATES
+                )
+            )
+            best = max(primary_counts, default=0)
+            if best > 0:
+                return best
+
+            fb_where = self._build_where_expression(
+                include_products_variant=False, sku=sku, channel=channel
+            )
+            fb_counts = await asyncio.gather(
+                *(
+                    self._query_single_raw_event(client, ev, fb_where, start, end)
+                    for ev in self._PRODUCT_VIEW_FALLBACK_CANDIDATES
+                )
+            )
+            return max(fb_counts, default=0)
 
     async def _sum_across_skus(
         self,
@@ -195,9 +244,8 @@ class MixpanelLiveCollector:
             )
 
         notes: list[str] = []
-        eff_start = start
-        if eff_start < self.MIN_START_DATE:
-            eff_start = self.MIN_START_DATE
+        eff_start = max(start, self.MIN_START_DATE)
+        if start < self.MIN_START_DATE:
             notes.append("Start date clipped to 2026-02-24 IST instrumentation boundary.")
 
         sku_key = ",".join(sorted(combo_skus)) or "ALL"
@@ -209,9 +257,7 @@ class MixpanelLiveCollector:
         checkout_start: date | None = eff_start
         if end <= self.CHECKOUT_CUTOFF_DATE:
             checkout_start = None
-            notes.append(
-                "Checkout steps omitted because window ends on/before 2026-09-18 cutoff."
-            )
+            notes.append("Checkout steps omitted because window ends on/before 2026-09-18 cutoff.")
         elif eff_start <= self.CHECKOUT_CUTOFF_DATE:
             checkout_start = self.CHECKOUT_CUTOFF_DATE + timedelta(days=1)
             notes.append(
@@ -223,13 +269,10 @@ class MixpanelLiveCollector:
             product_views = await self._sum_across_skus(
                 self.STEP_PRODUCT_VIEW, eff_start, end, combo_skus, channel
             )
-            begin_checkout = None
-            payment_reached = None
+            begin_checkout, payment_reached = None, None
         else:
             product_views, begin_checkout, payment_reached = await asyncio.gather(
-                self._sum_across_skus(
-                    self.STEP_PRODUCT_VIEW, eff_start, end, combo_skus, channel
-                ),
+                self._sum_across_skus(self.STEP_PRODUCT_VIEW, eff_start, end, combo_skus, channel),
                 self._sum_across_skus(
                     self.STEP_BEGIN_CHECKOUT, checkout_start, end, combo_skus, channel
                 ),
@@ -238,35 +281,18 @@ class MixpanelLiveCollector:
                 ),
             )
 
-        if product_views == 0:
-            view_to_checkout_str = "No sessions recorded in period"
-            checkout_to_pay_str = "No sessions recorded in period"
-        else:
-            view_to_checkout_str = (
-                f"{(begin_checkout / product_views) * 100.0:.2f}%"
-                if begin_checkout is not None
-                else "N/A (pre-cutoff)"
-            )
-            checkout_to_pay_str = (
-                f"{(payment_reached / begin_checkout) * 100.0:.2f}%"
-                if (begin_checkout and payment_reached is not None)
-                else ("No checkout sessions" if begin_checkout == 0 else "N/A (pre-cutoff)")
-            )
-
         result = {
             "channel": channel,
             "combo_skus": combo_skus,
             "effective_window_ist": f"{eff_start.isoformat()} – {end.isoformat()} IST",
             "checkout_window_ist": (
-                f"{checkout_start.isoformat()} – {end.isoformat()} IST"
-                if checkout_start
-                else None
+                f"{checkout_start.isoformat()} – {end.isoformat()} IST" if checkout_start else None
             ),
             "product_page_views": product_views,
             "begin_checkout": begin_checkout,
             "payment_options_reached": payment_reached,
-            "view_to_checkout_rate": view_to_checkout_str,
-            "checkout_to_payment_rate": checkout_to_pay_str,
+            "view_to_checkout_rate": _fmt_step_rate(begin_checkout, product_views),
+            "checkout_to_payment_rate": _fmt_step_rate(payment_reached, begin_checkout),
             "notes": notes,
         }
         self._cache.set(cache_key, result)

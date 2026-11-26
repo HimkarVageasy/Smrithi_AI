@@ -101,7 +101,10 @@ def render_live_diagnostic_report(
             "#### 2. Website 3-Step Paid Funnel (`Mixpanel Live`)",
             "| Funnel Step | Unique Paid Sessions | Progression Rate |",
             "|---|---:|---|",
-            f"| 1. Product Page View (`page_variant=\"products\"`) | {views:,} | — |",
+            (
+                f"| 1. Product Page View (`Page Viewed` · `page_variant=\"products\"`) | "
+                f"{views:,} | — |"
+            ),
             (
                 f"| 2. Checkout Start (`mp_begin_checkout`) | "
                 f"{f'{chk:,}' if chk is not None else 'N/A'} | "

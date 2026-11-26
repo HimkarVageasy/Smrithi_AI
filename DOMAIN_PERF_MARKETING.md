@@ -50,7 +50,7 @@
   - Meta sessions: `utm_source = "paid"` AND `utm_medium = "meta"` (case-insensitive). Count **sessions**, not raw events.
   - Google sessions: `utm_source = "paid"` (or `"google"`) AND `utm_medium` in `("cpc", "ppc", "google")` per live UTM convention.
 - **Exact 3-Step Funnel (`M2`):**
-  1. Product Page View (`page_variant = "products"`)
+  1. Product Page View (`Page Viewed` / `mp_page_view` with `page_variant = "products"`, or `Product Viewed` fallback)
   2. Checkout Start (`mp_begin_checkout`)
   3. Payment Options Reached (`mp_navigation_payment_options`)
   *(Note: There is NO unified cart step—Add to Cart and Buy Now are separate paths.)*
