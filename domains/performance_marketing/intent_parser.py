@@ -7,6 +7,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from core.router import TimeGrainOption, extract_time_spec
+from domains.performance_marketing.entity_lexicon import (
+    is_campaign_planning_query,
+    resolve_city,
+    resolve_product_entities,
+)
 from domains.performance_marketing.rules import GrainBoundaryCaveat, detect_grain_boundary_caveat
 
 QueryFocus = Literal[
@@ -23,75 +28,42 @@ QueryFocus = Literal[
     "daily_roas_hybrid",
 ]
 
-_PING_RE = re.compile(r"^\s*ping(\s+smriti(\s+v2)?)?[!\s.?]*$", re.IGNORECASE)
-
-_CAMPAIGN_PLAN_RE = re.compile(
-    r"\b(plan\s+a|media\s+plan|campaign\s+plan|campaign\s+brief|design\s+a\s+campaign|"
-    r"need\s+to\s+run|want\s+to\s+run|need\s+to\s+launch|launch\s+a\s+.*campaign|"
-    r"build\s+a\s+.*plan|allocate\s+rs|with\s+rs\.?\s*\d|with\s+₹\s*\d|budget\s+of\s+rs)\b",
+_PING_RE = re.compile(
+    r"^\s*(?:ping(?:\s+smriti(?:\s+v2)?)?|health\s*check)[!\s.?]*$",
     re.IGNORECASE,
 )
 
 _COMPETITOR_INTEL_RE = re.compile(
-    r"\b(competitor|competitors|rival|rivals|ad\s+library|ads\s+transparency|"
-    r"google\s+transparency|rival\s+ads|competitor\s+ads|competitor\s+creatives)\b",
+    r"\b("
+    r"competitor|competitors|rival|rivals|ad\s+library|meta\s+library|facebook\s+library|"
+    r"fb\s+ad\s+library|ads?\s+transparency|google\s+transparency|ad\s+center|"
+    r"rival\s+ads?|competitor\s+ads?|competitor\s+creatives?|other\s+brands?|"
+    r"who\s+else\s+is\s+(?:advertising|running)|benchmark\s+creatives?|"
+    r"(?:friends|dignity|karein|omron|dr\.?\s*morepen|dr\.?\s*trust|beato|vissco|frido|"
+    r"seniority|caresmith|agaro)\b.*\b(?:ads?|creatives?|hooks?|offers?|running|campaigns?)"
+    r")\b",
     re.IGNORECASE,
 )
 
 _LIVE_DIAGNOSTIC_RE = re.compile(
-    r"\b(mixpanel|funnel|checkout\s+step|payment\s+options|session|sessions|"
-    r"live\s+ads?|live\s+campaigns?|active\s+ads?|active\s+creatives?|creative\s+ctr|"
-    r"opportunity\s+score|live\s+diagnostic|live\s+pulse)\b",
+    r"\b("
+    r"mixpanel|funnel|drop[-\s]?off|dropping\s+off|cart\s+abandonment|checkout|"
+    r"payment\s+options|product\s+page\s+views?|website\s+traffic|website\s+conversion|"
+    r"cross[-\s]source\s+cvr|session|sessions|"
+    r"live\s+ads?|live\s+campaigns?|active\s+ads?|active\s+campaigns?|active\s+creatives?|"
+    r"running\s+ads?|current\s+ads?|creative\s+ctr|opportunity\s+score|live\s+diagnostic|"
+    r"live\s+pulse|ad\s+account\s+health|ads\s+manager|meta\s+account"
+    r")\b",
     re.IGNORECASE,
 )
 
-_KNOWN_FAMILIES: tuple[str, ...] = (
-    "nebulizer",
-    "healthmonitors",
-    "massagegun",
-    "glucosesensor",
-    "walking stick",
-    "bathroomsafety",
-    "allprodpros",
-    "allproducts",
-    "catalogue",
-    "walker",
-    "rollator",
-    "wheelchair",
-    "knee",
-    "lumbar",
-    "backrest",
-    "hearing",
-    "oximeter",
-    "bp monitor",
-    "thermometer",
-    "diaper",
-    "underpad",
-    "commode",
-    "stick",
-    "cane",
-)
-
-_KNOWN_CITIES: tuple[str, ...] = (
-    "delhi",
-    "mumbai",
-    "bengaluru",
-    "bangalore",
-    "hyderabad",
-    "chennai",
-    "kolkata",
-    "pune",
-    "ahmedabad",
-    "noida",
-    "gurgaon",
-    "gurugram",
-    "jaipur",
-    "lucknow",
-)
-
 _DEMAND_RE = re.compile(
-    r"\b(city\s+demand|product\s+demand|catalogue\s+product|demand\s+share|orders\s+in|"
-    r"orders\s+by\s+city|orders\s+by\s+product|delivered\s+orders\s+by\s+product)\b",
+    r"\b("
+    r"city\s+demand|product\s+demand|catalogue\s+product|catalogue\s+item|demand\s+share|"
+    r"demand\s+breakdown|orders?\s+in|orders?\s+by\s+city|orders?\s+by\s+state|"
+    r"orders?\s+by\s+product|delivered\s+orders?\s+by\s+product|top[-\s]selling|"
+    r"best[-\s]selling|top\s+products?|units?\s+delivered|which\s+cities"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -117,31 +89,19 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
 
     time_spec = extract_time_spec(q, default_months=3)
     lowered = q.lower()
+    prod = resolve_product_entities(q)
+    matched_family = prod.product_family
+    matched_catalogue = prod.catalogue_product
+    matched_city = resolve_city(q)
     caveat = detect_grain_boundary_caveat(q)
 
-    matched_family: str | None = None
-    for fam in _KNOWN_FAMILIES:
-        if fam in lowered:
-            matched_family = fam
-            break
-
-    matched_city: str | None = None
-    for city in _KNOWN_CITIES:
-        if re.search(rf"\b{re.escape(city)}\b", lowered):
-            matched_city = (
-                "BANGALORE"
-                if city == "bengaluru"
-                else ("GURGAON" if city == "gurugram" else city.upper())
-            )
-            break
-
-    if _CAMPAIGN_PLAN_RE.search(q):
+    if is_campaign_planning_query(q):
         return ParsedMarketingQuery(
             focus="campaign_plan",
             grain="MoM",
             window_count=4,
             product_family=matched_family,
-            catalogue_product=matched_family,
+            catalogue_product=matched_catalogue,
             city=matched_city,
         )
 
@@ -151,6 +111,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
             grain="MoM",
             window_count=1,
             product_family=matched_family,
+            catalogue_product=matched_catalogue,
             city=matched_city,
         )
 
@@ -161,7 +122,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
                 grain="MoM",
                 window_count=max(3, time_spec.window_count),
                 product_family=matched_family,
-                catalogue_product=matched_family,
+                catalogue_product=matched_catalogue,
                 boundary_caveat=caveat,
             )
         if caveat.kind == "city_roas":
@@ -170,7 +131,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
                 grain="MoM",
                 window_count=max(3, time_spec.window_count),
                 product_family=matched_family,
-                catalogue_product=matched_family,
+                catalogue_product=matched_catalogue,
                 city=matched_city,
                 boundary_caveat=caveat,
             )
@@ -180,6 +141,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
                 grain="DoD",
                 window_count=14,
                 product_family=matched_family,
+                catalogue_product=matched_catalogue,
                 boundary_caveat=caveat,
             )
 
@@ -189,6 +151,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
             grain=time_spec.grain,
             window_count=28,
             product_family=matched_family,
+            catalogue_product=matched_catalogue,
             city=matched_city,
         )
 
@@ -196,8 +159,9 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
         return ParsedMarketingQuery(
             focus="daily_or_weekly_orders",
             grain=time_spec.grain,
-            window_count=14 if time_spec.grain == "DoD" else 28,
+            window_count=time_spec.window_count if time_spec.grain == "DoD" else 28,
             product_family=matched_family,
+            catalogue_product=matched_catalogue,
             city=matched_city,
         )
 
@@ -207,7 +171,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
             grain=time_spec.grain,
             window_count=max(3, time_spec.window_count),
             product_family=matched_family,
-            catalogue_product=matched_family,
+            catalogue_product=matched_catalogue,
             city=matched_city,
         )
 
@@ -217,6 +181,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
             grain=time_spec.grain,
             window_count=max(3, time_spec.window_count),
             product_family=matched_family,
+            catalogue_product=matched_catalogue,
         )
 
     return ParsedMarketingQuery(
@@ -224,4 +189,5 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
         grain=time_spec.grain,
         window_count=max(3, time_spec.window_count),
         product_family=matched_family,
+        catalogue_product=matched_catalogue,
     )

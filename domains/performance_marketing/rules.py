@@ -7,6 +7,12 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
+from domains.performance_marketing.entity_lexicon import (
+    is_campaign_planning_query,
+    is_write_mutation_command,
+    resolve_city,
+)
+
 SettlementStatus = Literal[
     "provisional",
     "settling",
@@ -25,57 +31,37 @@ class GrainBoundaryCaveat:
     explanation_markdown: str
 
 
-_PLANNING_INTENT_RE = re.compile(
-    r"\b(plan\s+a|media\s+plan|campaign\s+plan|campaign\s+brief|design\s+a\s+campaign|"
-    r"need\s+to\s+run|want\s+to\s+run|need\s+to\s+launch|rs\.?\s*\d|₹\s*\d|inr\s*\d)\b",
-    re.IGNORECASE,
-)
-
-_WRITE_MUTATION_RE = re.compile(
-    r"\b("
-    r"(pause|unpause|resume|delete|remove|archive|disable|deactivate|turn\s+off|stop)\s+"
-    r"(?:(?:this|these|the|our|my|all|active|live|running)\s+)*"
-    r"(ad|ads|adset|adsets|ad\s+set|campaign|campaigns)|"
-    r"(edit|modify|update|change|increase|decrease|raise|lower|set)\s+"
-    r"(?:(?:this|these|the|our|my|all|active|live|daily)\s+)*"
-    r"(ad\s+copy|bid|bids|daily\s+budget|live\s+budget|campaign\s+budget|budget)|"
-    r"(publish|push)\s+(?:(?:this|these|the)\s+)*(ad|campaign)\s+(?:directly\s+)?(in|to|into)\s+"
-    r"(meta|facebook|google)"
-    r")\b",
-    re.IGNORECASE,
-)
+_ROAS_OR_CAC_RE = re.compile(r"\b(roas|cac)\b", re.IGNORECASE)
 
 _PRODUCT_ROAS_CAC_RE = re.compile(
     r"("
     r"\b(product[-\s]level|sku[-\s]level|per[-\s]product|per[-\s]sku|product[-\s]wise|sku[-\s]wise|"
-    r"by\s+product|by\s+sku|catalogue\s+product|each\s+product|each\s+sku)\b.*\b(roas|cac)\b|"
+    r"by\s+product|by\s+sku|catalogue\s+product|catalogue\s+item|individual\s+product|"
+    r"each\s+product|each\s+sku|every\s+sku)\b.*\b(roas|cac)\b|"
     r"\b(roas|cac)\b.*\b(by\s+product|by\s+sku|per\s+product|per\s+sku|product[-\s]level|"
-    r"sku[-\s]level|product[-\s]wise|sku[-\s]wise|for\s+each\s+product|for\s+each\s+sku|"
-    r"aenb\d+)\b"
+    r"sku[-\s]level|product[-\s]wise|sku[-\s]wise|catalogue\s+item|individual\s+product|"
+    r"for\s+each\s+product|for\s+each\s+sku|aenb\d+)\b"
     r")",
     re.IGNORECASE,
 )
 
-_CITY_STATE_ROAS_CAC_RE = re.compile(
+_CITY_STATE_GENERIC_RE = re.compile(
     r"("
     r"\b(city[-\s]level|state[-\s]level|city[-\s]wise|state[-\s]wise|by\s+city|by\s+state|"
-    r"per\s+city|per\s+state|pincode[-\s]level)\b.*\b(roas|cac)\b|"
+    r"per\s+city|per\s+state|pincode[-\s]level|pin[-\s]code[-\s]wise|across\s+cities|"
+    r"tier[-\s][123]\s+cities)\b.*\b(roas|cac)\b|"
     r"\b(roas|cac)\b.*\b(by\s+city|by\s+state|per\s+city|per\s+state|city[-\s]level|"
-    r"state[-\s]level|city[-\s]wise|state[-\s]wise)\b|"
-    r"\b(delhi|mumbai|bengaluru|bangalore|hyderabad|chennai|kolkata|pune|ahmedabad|noida|"
-    r"gurgaon|gurugram|jaipur|lucknow)\s+(net\s+|delivered\s+)?(roas|cac)\b|"
-    r"\b(roas|cac)\s+(in|for|of)\s+(delhi|mumbai|bengaluru|bangalore|hyderabad|chennai|"
-    r"kolkata|pune|ahmedabad|noida|gurgaon|gurugram|jaipur|lucknow)\b"
+    r"state[-\s]level|city[-\s]wise|state[-\s]wise|pincode|across\s+cities)\b"
     r")",
     re.IGNORECASE,
 )
 
 _DAILY_NET_ROAS_CAC_RE = re.compile(
     r"("
-    r"\b(daily|day[-\s]on[-\s]day|dod|yesterday'?s|today'?s)\s+"
-    r"(net\s+|delivered\s+)?(roas|cac)\b|"
+    r"\b(daily|day[-\s]on[-\s]day|day[-\s]over[-\s]day|day[-\s]wise|single[-\s]day|dod|"
+    r"yesterday'?s|today'?s)\s+(net\s+|delivered\s+)?(roas|cac)\b|"
     r"\b(net\s+roas|delivered\s+roas|net\s+cac|delivered\s+cac)\b.*\b(daily|day[-\s]on[-\s]day|"
-    r"by\s+day|per\s+day|dod)\b"
+    r"day[-\s]over[-\s]day|day[-\s]wise|by\s+day|per\s+day|dod|yesterday|today)\b"
     r")",
     re.IGNORECASE,
 )
@@ -103,8 +89,7 @@ def check_marketing_known_refusal(question: str) -> str | None:
     if not q:
         return None
 
-    # 1. Explicit ad-platform write/mutation block (never block "need to run / plan a campaign").
-    if _WRITE_MUTATION_RE.search(q) and not _PLANNING_INTENT_RE.search(q):
+    if is_write_mutation_command(q) and not is_campaign_planning_query(q):
         return (
             "**Read-Only Guardrail:** Smriti never creates, edits, pauses, or mutates live ads, "
             "budgets, or warehouse records.\n\n"
@@ -113,7 +98,6 @@ def check_marketing_known_refusal(question: str) -> str | None:
             "directly in Meta Ads Manager or Google Ads."
         )
 
-    # 2. Brand Campaign ROAS or CAC (awareness spend is never evaluated on ROAS/CAC).
     if _BRAND_ROAS_CAC_RE.search(q):
         return (
             "**Brand Campaign ROAS & CAC Unavailable:** Brand awareness spend is strictly "
@@ -123,7 +107,6 @@ def check_marketing_known_refusal(question: str) -> str | None:
             "delivery metrics (**Impressions, Reach, and CPM**)."
         )
 
-    # 3. Creative-level historical warehouse CPM (belongs in live ad connectors, not BigQuery).
     if _CREATIVE_WAREHOUSE_CPM_RE.search(q):
         return (
             "**Creative-Level Historical Warehouse CPM Unavailable:** Curated BigQuery views "
@@ -138,7 +121,7 @@ def check_marketing_known_refusal(question: str) -> str | None:
 def detect_grain_boundary_caveat(question: str) -> GrainBoundaryCaveat | None:
     """Detect grain boundaries so Smriti answers all valid metrics first + explains the rest."""
     q = question.strip()
-    if not q or _PLANNING_INTENT_RE.search(q):
+    if not q or is_campaign_planning_query(q):
         return None
 
     if _PRODUCT_ROAS_CAC_RE.search(q):
@@ -155,7 +138,10 @@ def detect_grain_boundary_caveat(question: str) -> GrainBoundaryCaveat | None:
             ),
         )
 
-    if _CITY_STATE_ROAS_CAC_RE.search(q):
+    has_city_roas = _CITY_STATE_GENERIC_RE.search(q) is not None or (
+        resolve_city(q) is not None and _ROAS_OR_CAC_RE.search(q) is not None
+    )
+    if has_city_roas:
         return GrainBoundaryCaveat(
             kind="city_roas",
             explanation_markdown=(
