@@ -5,6 +5,11 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from core.guardrails.math_audit import (
+    audit_funnel_monotonicity,
+    audit_window_subset_bound,
+    emit_reconciliation_warning,
+)
 from core.guardrails.output_audit import audit_rendered_markdown
 from core.schemas import Citation, SmritiQueryResponse
 from domains.performance_marketing.collectors.mixpanel_live import compute_cross_source_cvr
@@ -95,7 +100,32 @@ def render_live_diagnostic_report(
         chk = mixpanel_bundle.get("begin_checkout")
         pay = mixpanel_bundle.get("payment_options_reached")
         bq_28d_delivered = sum(int(r.get("net_orders") or 0) for r in recent_daily_orders)
-        cross_cvr = compute_cross_source_cvr(bq_28d_delivered, views)
+
+        funnel_check = audit_funnel_monotonicity([views, chk, pay])
+        cvr_mismatch_reason: str | None = None
+        if len(recent_acct) >= 2:
+            two_month_bound = sum(int(r.get("net_orders") or 0) for r in recent_acct)
+            sub_check = audit_window_subset_bound(bq_28d_delivered, two_month_bound)
+            if not sub_check.ok:
+                cvr_mismatch_reason = sub_check.reason
+        if cvr_mismatch_reason is None and chk is not None and chk > 0:
+            chk_bound = audit_window_subset_bound(bq_28d_delivered, chk)
+            if not chk_bound.ok:
+                cvr_mismatch_reason = chk_bound.reason
+
+        if cvr_mismatch_reason is not None:
+            emit_reconciliation_warning(
+                check_name="cross_source_cvr_subset_bound",
+                reason=cvr_mismatch_reason,
+                trace_id=trace_id,
+            )
+            cvr_bullet = (
+                "- **Cross-source conversion:** `[Reconciliation Warning: source scope "
+                f"mismatch detected — ratio withheld ({cvr_mismatch_reason})]`"
+            )
+        else:
+            cross_cvr = compute_cross_source_cvr(bq_28d_delivered, views)
+            cvr_bullet = f"- **{cross_cvr['label']}:** `{cross_cvr['display']}`"
 
         mp_lines = [
             "#### 2. Website 3-Step Paid Funnel (`Mixpanel Live`)",
@@ -115,8 +145,17 @@ def render_live_diagnostic_report(
                 f"{f'{pay:,}' if pay is not None else 'N/A'} | "
                 f"{mixpanel_bundle['checkout_to_payment_rate']} |"
             ),
-            f"\n- **{cross_cvr['label']}:** `{cross_cvr['display']}`",
+            f"\n{cvr_bullet}",
         ]
+        if not funnel_check.ok and funnel_check.reason:
+            emit_reconciliation_warning(
+                check_name="mixpanel_funnel_monotonicity",
+                reason=funnel_check.reason,
+                trace_id=trace_id,
+            )
+            mp_lines.append(
+                f"- *Reconciliation Warning:* Funnel monotonicity alert ({funnel_check.reason})."
+            )
         for note in mixpanel_bundle.get("notes") or []:
             mp_lines.append(f"- *Cutoff Note:* {note}")
         mp_lines.append(f"\n[Source: Mixpanel {mp_cite.object_name} · {mp_win}]")

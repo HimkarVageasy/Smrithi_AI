@@ -6,6 +6,11 @@ from collections import defaultdict
 from datetime import date
 from typing import Any
 
+from core.guardrails.math_audit import (
+    audit_additive_total,
+    audit_window_subset_bound,
+    emit_reconciliation_warning,
+)
 from core.guardrails.output_audit import audit_rendered_markdown
 from core.schemas import Citation, SmritiQueryResponse
 from domains.performance_marketing.math_engine import (
@@ -154,6 +159,17 @@ def render_account_and_family_report(
         gross_orders = int(row.get("gross_orders") or row.get("net_orders") or 0)
         net_orders = int(row.get("net_orders") or 0)
         net_rev = float(row.get("net_revenue") or 0.0)
+
+        spend_chk = audit_additive_total([perf_spend, brand_spend], total_spend)
+        if not spend_chk.ok and spend_chk.reason:
+            emit_reconciliation_warning(
+                check_name="account_spend_identity", reason=spend_chk.reason, trace_id=trace_id
+            )
+        ord_chk = audit_window_subset_bound(net_orders, gross_orders)
+        if not ord_chk.ok and ord_chk.reason:
+            emit_reconciliation_warning(
+                check_name="delivered_vs_placed_orders", reason=ord_chk.reason, trace_id=trace_id
+            )
 
         roas = compute_net_roas(net_rev, perf_spend)
         cac = compute_net_cac(perf_spend, net_orders)

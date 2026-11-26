@@ -41,6 +41,7 @@ Smrithi_AI/
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
 │   ├── guardrails/                       # Deterministic pure-Python pre-query, math, and output safety gates.
 │   │   ├── __init__.py                   # Guardrails package marker.
+│   │   ├── math_audit.py                 # Gate #2 cross-table reconciliation auditor (window subset bounds, funnel monotonicity, additive sums, Cloud Logging alerts).
 │   │   ├── output_audit.py               # Regex PII scrubber (Indian phones/emails), causal/margin word blocker, and mandatory [Source · Window] check.
 │   │   └── sql_ast.py                    # sqlglot AST validator enforcing single-SELECT queries, table allowlists, PII blocks, and 500 MB scan cap.
 │   │                                     # Prevents warehouse mutations, unapproved table scans, and accidental PII leaks before BigQuery runs.
@@ -88,6 +89,7 @@ Smrithi_AI/
         ├── test_codebase_map.py          # Parses CODEBASE_MAP.md and verifies every live repository file is documented and nothing stale remains.
         ├── test_known_refusals.py        # Verifies <10ms interception of Product/City/Daily/Brand ROAS & ad mutations without blocking Campaign Plans.
         ├── test_live_ad_connectors.py    # Tests Meta Account 774668588585301 lock, Rule F3, dormant Google Ads, and end-to-end Live Diagnostic degradation.
+        ├── test_math_audit.py            # Tests cross-table subset bounds (8,316 vs 7,124 trap), funnel monotonicity, additive totals, and warning emission.
         ├── test_math_engine.py           # Tests SUM/SUM ratios, Brand exclusion, CPM >= 1.0 rule, <5% flat deltas, reversals, and Indian Rs formatting.
         ├── test_mixpanel_rules.py        # Tests Mixpanel forbidden Purchase events, 2026-02-24 & 2026-09-18 cutoffs, 1-SKU fan-out, and M6 Cross-Source CVR.
         ├── test_runner_and_cache.py      # Tests InMemoryTTLCache LRU/TTL behavior and parallel runner <=8s circuit-breaker timeouts.
