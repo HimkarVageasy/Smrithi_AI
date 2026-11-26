@@ -15,12 +15,20 @@ QueryFocus = Literal[
     "family_focus",
     "product_or_city_demand",
     "daily_or_weekly_orders",
+    "live_diagnostic",
     "product_roas_hybrid",
     "city_roas_hybrid",
     "daily_roas_hybrid",
 ]
 
 _PING_RE = re.compile(r"^\s*ping(\s+smriti(\s+v2)?)?[!\s.?]*$", re.IGNORECASE)
+
+_LIVE_DIAGNOSTIC_RE = re.compile(
+    r"\b(mixpanel|funnel|checkout\s+step|payment\s+options|session|sessions|"
+    r"live\s+ads?|live\s+campaigns?|active\s+ads?|active\s+creatives?|creative\s+ctr|"
+    r"opportunity\s+score|live\s+diagnostic|live\s+pulse)\b",
+    re.IGNORECASE,
+)
 
 _KNOWN_FAMILIES: tuple[str, ...] = (
     "nebulizer",
@@ -140,6 +148,15 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
                 product_family=matched_family,
                 boundary_caveat=caveat,
             )
+
+    if _LIVE_DIAGNOSTIC_RE.search(q):
+        return ParsedMarketingQuery(
+            focus="live_diagnostic",
+            grain=time_spec.grain,
+            window_count=28,
+            product_family=matched_family,
+            city=matched_city,
+        )
 
     if time_spec.grain in {"DoD", "WoW"}:
         return ParsedMarketingQuery(

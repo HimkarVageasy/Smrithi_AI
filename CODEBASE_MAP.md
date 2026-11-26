@@ -36,6 +36,7 @@ Smrithi_AI/
 │   │                                     # Stamps GCP Cloud Trace IDs, normalizes caller identity, and short-circuits Known Refusals in <1s.
 │   ├── auth.py                           # Workforce Identity & Cloud Run IAM OIDC extractor (X-Serverless-Authorization / Bearer) with .strip().lower() normalization.
 │   │                                     # Prevents case-mismatch permission/memory bugs and enforces 401 rejection in production mode.
+│   ├── cache.py                          # Stateless bounded LRU + 5-min TTL RAM cache for live connector calls (upgradable to Firestore/Redis).
 │   ├── config.py                         # Immutable AppConfig model reading runtime flags strictly from environment variables.
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
 │   ├── guardrails/                       # Deterministic pure-Python pre-query, math, and output safety gates.
@@ -44,6 +45,7 @@ Smrithi_AI/
 │   │   └── sql_ast.py                    # sqlglot AST validator enforcing single-SELECT queries, table allowlists, PII blocks, and 500 MB scan cap.
 │   │                                     # Prevents warehouse mutations, unapproved table scans, and accidental PII leaks before BigQuery runs.
 │   ├── router.py                         # Domain-agnostic <1ms deterministic time-grain (DoD/WoW/MoM/YoY) and lookback window extractor.
+│   ├── runner.py                         # Parallel asyncio.gather task executor with <=8.0s per-connector timeouts and circuit-breaker degradation.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
 │                                         # Shared canonical data contract across both A2A JSON-RPC messages and REST (/v1/query) calls.
 ├── domains/                              # Pluggable business use-case packs implementing DomainPlugin without modifying core/.
@@ -56,16 +58,20 @@ Smrithi_AI/
 │       ├── __init__.py                   # Package marker for the Performance Marketing domain pack.
 │       ├── collectors/                   # Strictly read-only external data connectors with timeouts and schema validation.
 │       │   ├── __init__.py               # Collectors subpackage marker.
-│       │   └── bigquery_poc.py           # Sole financial/order truth connector querying allowlisted Gemini_POC views via sqlglot + 24h BQ cache.
-│       │                                 # Fetches Account, Closed Months, Ad-Family, Product/City Demand, and non-PII daily orders concurrently.
+│       │   ├── bigquery_poc.py           # Sole financial/order truth connector querying allowlisted Gemini_POC views via sqlglot + 24h BQ cache.
+│       │   │                             # Fetches Account, Closed Months, Ad-Family, Product/City Demand, and non-PII daily orders concurrently.
+│       │   ├── google_ads_account.py     # Read-only Google Ads SearchStream connector (dormant while GOOGLE_ADS_ENABLED=false; ready for future activation).
+│       │   ├── meta_ads_account.py       # Read-only Meta Graph API connector locked strictly to Ad Account 774668588585301 (live CTR/CPC/CPM & Opportunity Score).
+│       │   └── mixpanel_live.py          # Read-only Mixpanel 3-step funnel connector enforcing M1..M6 rules and 2026-02-24 / 2026-09-18 IST cutoffs.
 │       ├── demand_presenter.py           # Verified Markdown report builder for Catalogue Product/City Delivered Demand and DoD/WoW order tables.
 │       ├── intent_parser.py              # Deterministic marketing query classifier extracting focus, ad-family, and city scope in <1ms.
 │       ├── kpi_presenter.py              # Verified Account & Ad-Family report builder computing 100% of SUM/SUM ROAS, CAC, and MoM deltas in Python.
 │       │                                 # Flags provisional/settling months and stamps inline [Source: BigQuery ...] citations.
+│       ├── live_presenter.py             # Multi-source presenter combining BigQuery financial truth, Mixpanel 3-step funnel, Cross-Source CVR, and live ad pulse.
 │       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/MoM/YoY deltas, part-month clipping, and Rs formatting.
 │       │                                 # Ensures LLMs never compute ratios, average rates, or include Brand awareness spend in ROAS/CAC.
 │       ├── plugin.py                     # DomainPlugin entry point for Performance Marketing.
-│       │                                 # Orchestrates <1s refusal checks, parallel asyncio.gather BigQuery reads, Python math, and cited output.
+│       │                                 # Orchestrates <1s refusal checks, parallel core.runner execution, Python math, and cited output.
 │       ├── rules.py                      # Deterministic <1s Known Refusal interceptor (Product/City/Daily/Brand ROAS, mutations) and settlement status classifier.
 │       │                                 # Turns impossible queries that previously timed out after 44 minutes into instant helpful explanations.
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
@@ -81,7 +87,10 @@ Smrithi_AI/
         ├── test_bigquery_slice1.py       # End-to-end offline tests for Golden Scenario #1 (3m MoM), #2 (Product ROAS trap), PII blocks, and output audit.
         ├── test_codebase_map.py          # Parses CODEBASE_MAP.md and verifies every live repository file is documented and nothing stale remains.
         ├── test_known_refusals.py        # Verifies <10ms interception of Product/City/Daily/Brand ROAS & ad mutations without blocking Campaign Plans.
+        ├── test_live_ad_connectors.py    # Tests Meta Account 774668588585301 lock, Rule F3, dormant Google Ads, and end-to-end Live Diagnostic degradation.
         ├── test_math_engine.py           # Tests SUM/SUM ratios, Brand exclusion, CPM >= 1.0 rule, <5% flat deltas, reversals, and Indian Rs formatting.
+        ├── test_mixpanel_rules.py        # Tests Mixpanel forbidden Purchase events, 2026-02-24 & 2026-09-18 cutoffs, 1-SKU fan-out, and M6 Cross-Source CVR.
+        ├── test_runner_and_cache.py      # Tests InMemoryTTLCache LRU/TTL behavior and parallel runner <=8s circuit-breaker timeouts.
         ├── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
         └── test_sql_guardrails.py        # Tests sqlglot DDL/DML blocking, unallowlisted table rejection, CTE handling, and PII column / SELECT * blocks.
 ```

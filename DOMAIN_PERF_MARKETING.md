@@ -72,8 +72,8 @@
 
 ---
 
-### Connector 4: Google Ads Account Connector (Our Live Google Ads)
-- **Scope:** Official AGEasy Google Ads customer ID(s), strictly Read-Only (`GoogleAdsService.SearchStream`).
+### Connector 4: Google Ads Account Connector (Our Live Google Ads — Dormant-Ready)
+- **Scope:** Official AGEasy Google Ads customer ID(s), strictly Read-Only (`GoogleAdsService.SearchStream`). Controlled by `GOOGLE_ADS_ENABLED` (`false` by default while AGEasy is not actively running Google Ads; flips on via environment config with zero code changes when needed).
 - **Used For:** Live Search, Performance Max, and YouTube campaign status, daily budgets, top converting/high-intent search queries, Impression Share lost to budget/rank, and real-time CTR, CPC, and Spend.
 - **Boundary:** Like Meta, never use Google Ads conversion value as Net Revenue or Net ROAS—always reconcile net revenue via BigQuery `DELIVERED` orders.
 
