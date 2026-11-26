@@ -71,6 +71,7 @@ Smrithi_AI/
 │       │   └── web_competitor.py         # Sanitized Google Programmable Search benchmark collector for public category/offer context.
 │       ├── competitor_presenter.py       # Rival Creative Audit presenter (Golden #6) enforcing Rule F2 <=50 sample and zero performance rankings.
 │       ├── demand_presenter.py           # Verified Markdown report builder for Catalogue Product/City Delivered Demand and DoD/WoW order tables.
+│       ├── entity_lexicon.py             # Shared semantic lexicon resolving product/city synonyms, INR/word budgets, live mutations, and planning intents.
 │       ├── intake_extractor.py           # Deterministic Campaign Plan intake parser extracting Rs/Lakh/Crore budgets, targets, and Rule #22 assumed tags.
 │       ├── intent_parser.py              # Deterministic marketing query classifier extracting focus, ad-family, and city scope in <1ms.
 │       ├── kpi_presenter.py              # Verified Account & Ad-Family report builder computing 100% of SUM/SUM ROAS, CAC, and MoM deltas in Python.
@@ -101,6 +102,7 @@ Smrithi_AI/
         ├── test_math_audit.py            # Tests cross-table subset bounds (8,316 vs 7,124 trap), funnel monotonicity, additive totals, and warning emission.
         ├── test_math_engine.py           # Tests SUM/SUM ratios, Brand exclusion, CPM >= 1.0 rule, <5% flat deltas, reversals, and Indian Rs formatting.
         ├── test_mixpanel_rules.py        # Tests Mixpanel forbidden Purchase events, 2026-02-24 & 2026-09-18 cutoffs, 1-SKU fan-out, and M6 Cross-Source CVR.
+        ├── test_natural_language_routing.py # Verifies diverse natural-language phrasings, word/Rupee budgets, product synonyms, and sequential brief numbering.
         ├── test_runner_and_cache.py      # Tests InMemoryTTLCache LRU/TTL behavior and parallel runner <=8s circuit-breaker timeouts.
         ├── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
         ├── test_slice3_campaign_and_rivals.py # Tests Golden Scenarios #3 (Rs 3L plan), #4 (6.0x pushback), #5 ("Need to run"), #6 (Rival <=50 cap), and odd-rupee sums.

@@ -44,7 +44,7 @@ def build_collection_tasks(
     """Assemble concurrent read-only tasks per routed intent."""
     end_yday = today_ist - timedelta(days=1)
     start_28d = end_yday - timedelta(days=27)
-    search_term = routed.product_family or "senior care health devices"
+    search_term = routed.catalogue_product or routed.product_family or "senior care health devices"
 
     if routed.focus == "competitor_intel":
         tasks = [
@@ -196,7 +196,9 @@ def build_collection_tasks(
             ),
         ),
     ]
-    if routed.focus == "product_roas_hybrid":
+    if routed.focus == "product_roas_hybrid" or (
+        routed.focus == "family_focus" and routed.catalogue_product
+    ):
         tasks.append(
             _task(
                 "bq_demand",

@@ -113,7 +113,7 @@ class PerformanceMarketingPlugin:
             intake = extract_campaign_intake(
                 raw_bundle["question"],
                 today_ist=today_ist,
-                matched_product=routed.product_family,
+                matched_product=routed.product_family or routed.catalogue_product,
                 matched_city=routed.city,
             )
             strategy = compute_campaign_strategy(
@@ -166,7 +166,11 @@ class PerformanceMarketingPlugin:
 
         if routed.focus == "competitor_intel":
             return render_competitor_intel_report(
-                query_label=routed.product_family or "senior care health devices",
+                query_label=(
+                    routed.catalogue_product
+                    or routed.product_family
+                    or "senior care health devices"
+                ),
                 meta_lib=res.get("Meta Ad Library"),
                 google_transp=res.get("Google Ads Transparency"),
                 web_ctx=res.get("Google Search"),
