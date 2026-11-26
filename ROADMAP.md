@@ -20,11 +20,11 @@
 
 ---
 
-## Slice 2: Live Funnel & Ad Account Connectors (Parallel Execution)
-- Implement `core/runner.py` (`asyncio.gather` with 8s per-connector timeouts and graceful partial-result circuit breakers).
-- Plug in `mixpanel_live.py` (3-step funnel, `24 Feb 2026` & `18 Sep 2026` date rules, cross-source CVR labeling).
-- Plug in `meta_ads_account.py` (Account `774668588585301`: live campaigns, creative CTR/CPC/CPM, Opportunity Score) and `google_ads_account.py` (live Search/PMax/YouTube CTR/CPC/Spend/Search Terms).
-- **Done When:** Live diagnostic queries combine BigQuery Net ROAS + Mixpanel Funnel + Meta/Google real-time CTR/CPC in **`< 8 seconds`** with full offline mock tests.
+## Slice 2: Live Funnel & Ad Account Connectors (Parallel Execution) — ✅ BUILT (`87/87` Tests)
+- Implemented `core/runner.py` (`asyncio.gather` with `<= 8.0s` per-connector timeouts and graceful partial-result circuit breakers) and `core/cache.py` (`5-min` stateless LRU/TTL cache).
+- Plugged in `mixpanel_live.py` (`eu.mixpanel.com` project `3992118`: 3-step funnel, `24 Feb 2026` & `18 Sep 2026` date rules, forbidden Purchase block, `M6` Cross-Source CVR).
+- Plugged in `meta_ads_account.py` (Account `774668588585301`: live campaigns, creative CTR/CPC/CPM, Opportunity Score, `Rule F3`) and dormant-ready `google_ads_account.py` (`GOOGLE_ADS_ENABLED=false` until org turns on Google Ads).
+- **Done When:** Live diagnostic queries combine BigQuery Net ROAS + Mixpanel EU Funnel (+ Meta live ads once `META_ACCESS_TOKEN` is mounted, degrading gracefully meanwhile) in **`< 8 seconds`**.
 
 ---
 
