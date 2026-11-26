@@ -11,6 +11,8 @@ from domains.performance_marketing.rules import GrainBoundaryCaveat, detect_grai
 
 QueryFocus = Literal[
     "ping",
+    "campaign_plan",
+    "competitor_intel",
     "account_and_family_mom",
     "family_focus",
     "product_or_city_demand",
@@ -22,6 +24,19 @@ QueryFocus = Literal[
 ]
 
 _PING_RE = re.compile(r"^\s*ping(\s+smriti(\s+v2)?)?[!\s.?]*$", re.IGNORECASE)
+
+_CAMPAIGN_PLAN_RE = re.compile(
+    r"\b(plan\s+a|media\s+plan|campaign\s+plan|campaign\s+brief|design\s+a\s+campaign|"
+    r"need\s+to\s+run|want\s+to\s+run|need\s+to\s+launch|launch\s+a\s+.*campaign|"
+    r"build\s+a\s+.*plan|allocate\s+rs|with\s+rs\.?\s*\d|with\s+₹\s*\d|budget\s+of\s+rs)\b",
+    re.IGNORECASE,
+)
+
+_COMPETITOR_INTEL_RE = re.compile(
+    r"\b(competitor|competitors|rival|rivals|ad\s+library|ads\s+transparency|"
+    r"google\s+transparency|rival\s+ads|competitor\s+ads|competitor\s+creatives)\b",
+    re.IGNORECASE,
+)
 
 _LIVE_DIAGNOSTIC_RE = re.compile(
     r"\b(mixpanel|funnel|checkout\s+step|payment\s+options|session|sessions|"
@@ -119,6 +134,25 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
                 else ("GURGAON" if city == "gurugram" else city.upper())
             )
             break
+
+    if _CAMPAIGN_PLAN_RE.search(q):
+        return ParsedMarketingQuery(
+            focus="campaign_plan",
+            grain="MoM",
+            window_count=4,
+            product_family=matched_family,
+            catalogue_product=matched_family,
+            city=matched_city,
+        )
+
+    if _COMPETITOR_INTEL_RE.search(q):
+        return ParsedMarketingQuery(
+            focus="competitor_intel",
+            grain="MoM",
+            window_count=1,
+            product_family=matched_family,
+            city=matched_city,
+        )
 
     if caveat is not None:
         if caveat.kind == "product_roas":

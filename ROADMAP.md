@@ -28,11 +28,10 @@
 
 ---
 
-## Slice 3: Competitor Ad Libraries & Campaign Planning Engine
-- Plug in `meta_ad_library.py` (50-ad rival creative sampler) + `google_ad_transparency.py` (rival Google Search/YouTube creative sampler) + `web_competitor.py`.
-- Implement deterministic Campaign Budget & Phasing allocator in `math_engine.py` (scale-up multiple check, feasibility pushback, Meta/Google split, 3-phase ramp, 80/20 funnel split, 14-day A/B test math summing strictly to 100% of budget).
-- Wire `prompts/narrator.md` + inline `[Source · Period]` citation auditor.
-- **Done When:** The `"Plan a winter campaign for Nebulizer with Rs 3,00,000"` query (and `"Need to run..."` variant) finishes in **`12–18 seconds`** instead of 15 minutes, with Meta + Google splits and verified citations.
+## Slice 3: Competitor Ad Libraries & Campaign Planning Engine — ✅ BUILT (Pending Live Verify)
+- Plugged in `meta_ad_library.py` (`<= 50` rival creative sampler per `Rule F2`) + `google_ad_transparency.py` + `web_competitor.py`.
+- Implemented deterministic Campaign Strategist & Phasing allocator in `campaign_planner.py` (exact scale-up multiple, `6.0x` ROAS feasibility pushback, channel & 3-phase ramp, `80/20` funnel split, 14-day A/B test carve-out summing strictly to `100%` of budget).
+- Wired `plan_presenter.py` + `prompts/narrator.md` + inline `[Source · Period]` citation & causal-word auditor covering Golden Scenarios #3, #4, #5, and #6.
 
 ---
 

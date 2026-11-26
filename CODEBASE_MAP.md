@@ -57,22 +57,31 @@ Smrithi_AI/
 │   │                                     # Decouples core/app.py from importing specific business domain packages directly.
 │   └── performance_marketing/            # Domain #1: AGEasy / Antara Senior Care Performance Marketing intelligence pack.
 │       ├── __init__.py                   # Package marker for the Performance Marketing domain pack.
+│       ├── campaign_planner.py           # Deterministic Campaign Strategist: intake assumptions, scale-up multiple, 6.0x ROAS pushback, and 100%-sum Rs phasing.
+│       ├── collection_plan.py            # Assembles concurrent CollectorTask lists per routed intent for parallel execution in core/runner.py.
 │       ├── collectors/                   # Strictly read-only external data connectors with timeouts and schema validation.
 │       │   ├── __init__.py               # Collectors subpackage marker.
 │       │   ├── bigquery_poc.py           # Sole financial/order truth connector querying allowlisted Gemini_POC views via sqlglot + 24h BQ cache.
 │       │   │                             # Fetches Account, Closed Months, Ad-Family, Product/City Demand, and non-PII daily orders concurrently.
+│       │   ├── google_ad_transparency.py # Public rival Google Search/YouTube/Display creative sampler in India (zero performance ranking claims).
 │       │   ├── google_ads_account.py     # Read-only Google Ads SearchStream connector (dormant while GOOGLE_ADS_ENABLED=false; ready for future activation).
+│       │   ├── meta_ad_library.py        # Public rival Meta Ad Library sampler (<=50 active ads in IN per Rule F2; zero spend/ranking claims).
 │       │   ├── meta_ads_account.py       # Read-only Meta Graph API connector locked strictly to Ad Account 774668588585301 (live CTR/CPC/CPM & Opportunity Score).
-│       │   └── mixpanel_live.py          # Read-only Mixpanel 3-step funnel connector enforcing M1..M6 rules and 2026-02-24 / 2026-09-18 IST cutoffs.
+│       │   ├── mixpanel_live.py          # Read-only Mixpanel 3-step funnel connector enforcing M1..M6 rules and 2026-02-24 / 2026-09-18 IST cutoffs.
+│       │   └── web_competitor.py         # Sanitized Google Programmable Search benchmark collector for public category/offer context.
+│       ├── competitor_presenter.py       # Rival Creative Audit presenter (Golden #6) enforcing Rule F2 <=50 sample and zero performance rankings.
 │       ├── demand_presenter.py           # Verified Markdown report builder for Catalogue Product/City Delivered Demand and DoD/WoW order tables.
+│       ├── intake_extractor.py           # Deterministic Campaign Plan intake parser extracting Rs/Lakh/Crore budgets, targets, and Rule #22 assumed tags.
 │       ├── intent_parser.py              # Deterministic marketing query classifier extracting focus, ad-family, and city scope in <1ms.
 │       ├── kpi_presenter.py              # Verified Account & Ad-Family report builder computing 100% of SUM/SUM ROAS, CAC, and MoM deltas in Python.
 │       │                                 # Flags provisional/settling months and stamps inline [Source: BigQuery ...] citations.
 │       ├── live_presenter.py             # Multi-source presenter combining BigQuery financial truth, Mixpanel 3-step funnel, Cross-Source CVR, and live ad pulse.
 │       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/MoM/YoY deltas, part-month clipping, and Rs formatting.
 │       │                                 # Ensures LLMs never compute ratios, average rates, or include Brand awareness spend in ROAS/CAC.
-│       ├── plugin.py                     # DomainPlugin entry point for Performance Marketing.
-│       │                                 # Orchestrates <1s refusal checks, parallel core.runner execution, Python math, and cited output.
+│       ├── plan_presenter.py             # Executive presenter for Structured Campaign Briefs (Golden #3–#5) and Competitor Creative Audits (Golden #6).
+│       ├── plugin.py                     # DomainPlugin Supervisor orchestrating <1s refusals, parallel core.runner execution, strategy math, and cited output.
+│       ├── prompts/                      # Governed prompt templates for read-only narrative formatting.
+│       │   └── narrator.md               # Executive narrator instructions enforcing zero LLM math, causal word bans, and <=3 confirmation questions.
 │       ├── rules.py                      # Deterministic <1s Known Refusal interceptor (Product/City/Daily/Brand ROAS, mutations) and settlement status classifier.
 │       │                                 # Turns impossible queries that previously timed out after 44 minutes into instant helpful explanations.
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
@@ -94,5 +103,6 @@ Smrithi_AI/
         ├── test_mixpanel_rules.py        # Tests Mixpanel forbidden Purchase events, 2026-02-24 & 2026-09-18 cutoffs, 1-SKU fan-out, and M6 Cross-Source CVR.
         ├── test_runner_and_cache.py      # Tests InMemoryTTLCache LRU/TTL behavior and parallel runner <=8s circuit-breaker timeouts.
         ├── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
+        ├── test_slice3_campaign_and_rivals.py # Tests Golden Scenarios #3 (Rs 3L plan), #4 (6.0x pushback), #5 ("Need to run"), #6 (Rival <=50 cap), and odd-rupee sums.
         └── test_sql_guardrails.py        # Tests sqlglot DDL/DML blocking, unallowlisted table rejection, CTE handling, and PII column / SELECT * blocks.
 ```
