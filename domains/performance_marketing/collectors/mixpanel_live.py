@@ -71,11 +71,13 @@ class MixpanelLiveCollector:
         cache: CacheBackend | None = None,
         step_fetcher: MixpanelStepFetcher | None = None,
     ) -> None:
-        self._project_id = (project_id or os.getenv("MIXPANEL_PROJECT_ID", "")).strip()
+        self._project_id = (
+            project_id if project_id is not None else os.getenv("MIXPANEL_PROJECT_ID", "3992118")
+        ).strip()
         self._username = (username or os.getenv("MIXPANEL_USERNAME", "")).strip()
         self._secret = (secret or os.getenv("MIXPANEL_SECRET", "")).strip()
         self._api_host = (
-            api_host or os.getenv("MIXPANEL_API_HOST", "https://mixpanel.com")
+            api_host or os.getenv("MIXPANEL_API_HOST", "https://eu.mixpanel.com")
         ).rstrip("/")
         self._cache = cache or build_default_cache()
         self._step_fetcher = step_fetcher
