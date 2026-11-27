@@ -1,4 +1,4 @@
-"""Domain-agnostic FastAPI gateway for Google Gemini Enterprise (A2A & OpenAPI) <-> Cloud Run."""
+"""Domain-agnostic FastAPI gateway for Google Gemini Enterprise (A2A & REST) <-> Cloud Run."""
 
 from __future__ import annotations
 
@@ -19,6 +19,10 @@ from core.a2a import (
 )
 from core.auth import extract_caller_principal
 from core.config import AppConfig
+from core.domain_router import DomainAccessDeniedError, resolve_domain_for_query
+from core.memory.ingest import ingest_domain_document
+from core.memory.schemas import MemoryIngestRequest, MemoryIngestResponse
+from core.memory.store import CloudMemoryStore, MemoryWriteForbiddenError
 from core.schemas import Citation, HealthResponse, SmritiQueryRequest, SmritiQueryResponse
 from domains.base import DomainRegistry
 from domains.bootstrap import build_default_registry
@@ -53,15 +57,34 @@ async def _run_domain_pipeline(
     )
 
     try:
-        plugin = domain_registry.resolve(
-            payload.domain_hint,
-            fallback_default=cfg.default_domain,
+        plugin = resolve_domain_for_query(
+            payload.question,
+            domain_hint=payload.domain_hint,
+            caller_wif=caller_wif,
+            registry=domain_registry,
+            default_domain=cfg.default_domain,
         )
     except KeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except DomainAccessDeniedError as exc:
+        now_ist = datetime.now(tz=_IST).strftime("%d %b %Y %H:%M:%S IST")
+        elapsed_ms = max(0, (time.perf_counter_ns() - started_ns) // 1_000_000)
+        acl_cite = Citation(
+            source="Deterministic Guardrail",
+            object_name="core.domain_router.SMRITI_DOMAIN_ACL",
+            date_window_ist=now_ist,
+        )
+        return SmritiQueryResponse(
+            headline="Domain Access Restricted",
+            answer_markdown=(
+                f"**Department Access Boundary:** {exc}\n\n"
+                f"[Source: {acl_cite.source} {acl_cite.object_name} · {now_ist}]"
+            ),
+            citations=[acl_cite],
+            degraded_sources=[],
+            latency_ms=elapsed_ms,
+            trace_id=trace_id,
+        )
 
     parsed_intent = {
         "question": payload.question.strip(),
@@ -99,22 +122,19 @@ async def _run_domain_pipeline(
     rendered = await plugin.render_response(verified_payload)
 
     elapsed_ms = max(0, (time.perf_counter_ns() - started_ns) // 1_000_000)
-    return rendered.model_copy(
-        update={
-            "latency_ms": elapsed_ms,
-            "trace_id": trace_id,
-        }
-    )
+    return rendered.model_copy(update={"latency_ms": elapsed_ms, "trace_id": trace_id})
 
 
 def create_app(
     *,
     registry: DomainRegistry | None = None,
     config: AppConfig | None = None,
+    memory_store: CloudMemoryStore | None = None,
 ) -> FastAPI:
     """Create a stateless Smriti v2 FastAPI application instance."""
     cfg = config or AppConfig.from_env()
     domain_registry = registry or build_default_registry()
+    shared_memory = memory_store or CloudMemoryStore()
 
     application = FastAPI(
         title="Smriti v2 Enterprise Intelligence API",
@@ -203,6 +223,43 @@ def create_app(
             cfg=cfg,
             domain_registry=domain_registry,
         )
+
+    @application.post(
+        "/v1/memory/ingest",
+        response_model=MemoryIngestResponse,
+        operation_id="ingestDomainMemory",
+        summary="Ingest an official document or spreadsheet into domain-isolated Smriti Memory",
+    )
+    async def ingest_memory(
+        payload: MemoryIngestRequest,
+        request: Request,
+    ) -> MemoryIngestResponse:
+        trace_id = _extract_trace_id(request.headers)
+        caller_wif = extract_caller_principal(
+            request.headers,
+            require_auth=cfg.require_auth,
+            trust_cloud_run_iam_bearer=cfg.trust_cloud_run_iam_bearer,
+        )
+        try:
+            plugin = domain_registry.resolve(payload.domain_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+        target_store = getattr(plugin, "memory_store", None) or shared_memory
+        try:
+            return await ingest_domain_document(
+                payload,
+                plugin=plugin,
+                store=target_store,
+                caller_wif=caller_wif,
+                trace_id=trace_id,
+            )
+        except MemoryWriteForbiddenError as exc:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+            ) from exc
 
     return application
 

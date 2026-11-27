@@ -19,6 +19,10 @@ class CacheBackend(Protocol):
         """Store value with bounded TTL in seconds."""
         ...
 
+    def clear(self) -> None:
+        """Invalidate cached entries."""
+        ...
+
 
 class InMemoryTTLCache:
     """Bounded LRU + TTL RAM cache safe for ephemeral Cloud Run container instances."""
@@ -57,6 +61,9 @@ class InMemoryTTLCache:
         self._store.move_to_end(key)
         while len(self._store) > self._max_entries:
             self._store.popitem(last=False)
+
+    def clear(self) -> None:
+        self._store.clear()
 
 
 def build_default_cache() -> CacheBackend:

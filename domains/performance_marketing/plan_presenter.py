@@ -1,11 +1,13 @@
-"""Executive presenter for Structured Campaign Briefs (Golden Scenarios #3, #4, #5)."""
+"""Executive presenter for Structured Campaign Briefs (Golden Scenarios #3, #4, #5 + Memory)."""
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any
 
 from core.guardrails.output_audit import audit_rendered_markdown
+from core.memory.schemas import MemoryChunk
 from core.schemas import Citation, SmritiQueryResponse
 from domains.performance_marketing.competitor_presenter import format_rival_creative_block
 from domains.performance_marketing.kpi_presenter import (
@@ -36,6 +38,8 @@ def render_campaign_plan_report(
     """Render structured Campaign Brief with verified math and inline [Source · Window] tags."""
     intake: CampaignPlanIntake = strategy["intake"]
     plan: PhasedBudgetPlan = strategy["phased_plan"]
+    rule_chunk: MemoryChunk | None = strategy.get("applied_ruleset_chunk")
+    mem_chunks: list[MemoryChunk] = strategy.get("memory_chunks") or []
     cites: list[Citation] = []
     numbered_sections: list[tuple[str, str]] = []
 
@@ -56,6 +60,11 @@ def render_campaign_plan_report(
         if intake.external_premise
         else ""
     )
+    rule_line = (
+        f"\n- **Active Ruleset Applied:** `{rule_chunk.source_title}` (`{rule_chunk.trust_tier}`)"
+        if rule_chunk is not None
+        else ""
+    )
     numbered_sections.append(
         (
             "Verdict & Intake Scope",
@@ -63,7 +72,7 @@ def render_campaign_plan_report(
             f"- **Product / Family:** `{intake.product_query}` · **Region:** `{reg_lbl}` · "
             f"**Window:** `{intake.window_label}`\n"
             f"- **Planned Budget:** **{format_inr(intake.budget_inr)}** ({scale_lbl}) · "
-            f"**Target KPI:** `{tgt_lbl}`{premise_line}",
+            f"**Target KPI:** `{tgt_lbl}`{premise_line}{rule_line}",
         )
     )
 
@@ -164,6 +173,32 @@ def render_campaign_plan_report(
     numbered_sections.append(
         ("Phased Channel & Funnel Budget Allocation (`100%` Verified Sum)", "\n".join(p_lines))
     )
+
+    if mem_chunks:
+        m_lines: list[str] = []
+        seen_mem: set[str] = set()
+        for mc in mem_chunks[:4]:
+            safe_txt = mc.content_text.replace("\n", " ")[:220]
+            for banned in BANNED_CAUSAL_WORDS:
+                safe_txt = re.sub(rf"\b{re.escape(banned)}\b", "[observed]", safe_txt, flags=re.I)
+            m_lines.append(
+                f"- **{mc.section_type}:** {safe_txt} "
+                f"[Source: Smriti Memory {mc.source_title} ({mc.trust_tier}) · "
+                f"{mc.created_at_iso[:10]}]"
+            )
+            if mc.source_title not in seen_mem:
+                seen_mem.add(mc.source_title)
+                cites.append(
+                    Citation(
+                        source="Smriti Memory",
+                        object_name=f"{mc.source_title} ({mc.trust_tier})",
+                        date_window_ist=mc.created_at_iso[:10],
+                        row_count=1,
+                    )
+                )
+        numbered_sections.append(
+            ("Institutional Memory & Ruleset Learnings (`Smriti Memory`)", "\n".join(m_lines))
+        )
 
     today_str = f"{today_ist.strftime('%d %b %Y')} IST"
     rival_md, r_cites = format_rival_creative_block(meta_lib, google_transp, None, today_str)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 IntentType = Literal[
     "KPI_SINGLE_OR_TREND",
@@ -48,11 +48,18 @@ class BudgetPhaseRow(BaseModel):
 
     phase_name: str = Field(..., min_length=1)
     channel: Literal["Meta Ads", "Google Ads", "Blended"]
-    funnel_stage: Literal["Prospecting (80%)", "Retargeting (20%)", "A/B Test Arm"]
+    funnel_stage: str = Field(..., min_length=3)
     amount_inr: int = Field(..., ge=0)
     daily_run_rate_inr: int = Field(..., ge=0)
     date_range: str = Field(..., min_length=1)
     scale_condition: str = Field(..., min_length=1)
+
+    @field_validator("funnel_stage")
+    @classmethod
+    def _validate_funnel_stage(cls, value: str) -> str:
+        if value == "A/B Test Arm" or value.startswith(("Prospecting (", "Retargeting (")):
+            return value
+        raise ValueError(f"Invalid funnel_stage '{value}'.")
 
 
 class PhasedBudgetPlan(BaseModel):
