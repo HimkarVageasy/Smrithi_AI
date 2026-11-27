@@ -31,6 +31,7 @@ class MemoryChunk(BaseModel):
     section_type: str = Field(default="General", min_length=1, max_length=64)
     content_text: str = Field(..., min_length=3, max_length=8000)
     metrics_json: dict[str, Any] = Field(default_factory=dict)
+    embedding: list[float] = Field(default_factory=list)
     source_title: str = Field(..., min_length=2, max_length=200)
     gcs_uri: str | None = None
     created_by_wif: str = Field(..., min_length=3)

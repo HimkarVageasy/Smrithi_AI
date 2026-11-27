@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from core.app import create_app
 from core.config import AppConfig
+from core.memory.embeddings import EmbeddingTaskType, GeminiEmbedder, cosine_similarity
 from core.memory.store import CloudMemoryStore
 from core.schemas import Citation, SmritiQueryResponse
 from domains.base import DomainRegistry
@@ -317,3 +318,58 @@ def test_single_agent_auto_routes_across_domains_with_strict_memory_and_acl_isol
         json={"question": "How many Antara Noida tour leads booked?"},
     )
     assert "CRM domain active with `3` CRM memory chunks" in ok_crm.json()["answer_markdown"]
+
+
+def test_hybrid_vector_cosine_recall_finds_semantic_match_without_exact_keyword() -> None:
+    assert round(cosine_similarity([1.0, 0.0], [1.0, 0.0]), 4) == 1.0
+    assert cosine_similarity([1.0, 0.0], [0.0, 1.0]) == 0.0
+
+    async def _fake_embed(
+        texts: Sequence[str], task_type: EmbeddingTaskType
+    ) -> list[list[float]]:
+        out: list[list[float]] = []
+        for txt in texts:
+            low = txt.lower()
+            if any(k in low for k in ("dermatitis", "absorbent", "diaper", "leakage")):
+                out.append([0.92, 0.08, 0.0])
+            else:
+                out.append([0.02, 0.98, 0.0])
+        return out
+
+    stored_rows: list[dict[str, Any]] = []
+
+    async def _insert(rows: list[dict[str, Any]]) -> None:
+        stored_rows.extend(rows)
+
+    async def _query(sql: str, params: Sequence[tuple[str, str, Any]]) -> list[dict[str, Any]]:
+        return list(stored_rows)
+
+    store = CloudMemoryStore(
+        approvers_raw="*",
+        embedder=GeminiEmbedder(embed_fn=_fake_embed),
+        query_fn=_query,
+        insert_fn=_insert,
+    )
+    reg = DomainRegistry()
+    reg.register(_build_marketing_plugin(store), is_default=True)
+    client = TestClient(create_app(registry=reg, memory_store=store))
+
+    # BRD discusses overnight dermatitis & absorbent core WITHOUT using the word "diaper"!
+    client.post(
+        "/v1/memory/ingest",
+        headers={"X-Goog-Authenticated-User-Email": "himkar.v.ageasy@antaraseniorcare.com"},
+        json={
+            "domain_id": "performance_marketing",
+            "filename": "Overnight_Skin_Care_BRD.md",
+            "text_content": "# Hook Insight\nBreathable absorbent core prevents senior dermatitis.",
+        },
+    )
+    assert len(stored_rows[0]["embedding"]) == 3
+
+    # Query asks about "diaper" — zero lexical tag overlap on the BRD, matched via cosine vector!
+    resp = client.post(
+        "/v1/query",
+        json={"question": "Recall Smriti memory for adult diaper campaigns"},
+    )
+    assert resp.status_code == 200
+    assert "Breathable absorbent core prevents senior dermatitis" in resp.json()["answer_markdown"]

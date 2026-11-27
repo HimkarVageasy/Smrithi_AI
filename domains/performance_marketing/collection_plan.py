@@ -58,6 +58,7 @@ def build_collection_tasks(
                 "Smriti Memory",
                 lambda: memory_store.recall(
                     domain_id="performance_marketing",
+                    query_text=question,
                     entity_tags=mem_tags,
                     limit=10,
                 ),
@@ -130,6 +131,7 @@ def build_collection_tasks(
                     "Smriti Memory",
                     lambda: memory_store.recall(
                         domain_id="performance_marketing",
+                        query_text=question,
                         entity_tags=mem_tags,
                         limit=6,
                     ),

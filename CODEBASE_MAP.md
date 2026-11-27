@@ -49,9 +49,10 @@ Smrithi_AI/
 │   ├── memory/                           # Universal domain-isolated Institutional Memory engine (BigQuery smriti_memory_chunks + GCS domain folders).
 │   │   ├── __init__.py                   # Memory subpackage marker.
 │   │   ├── doc_parser.py                 # Stateless pure-Python MD/TXT/CSV/XLSX/DOCX/PDF extractor decomposing documents into PII-scrubbed L1/L2/L3 chunks.
+│   │   ├── embeddings.py                 # Gemini Embedding client (gemini-embedding-001) & pure-Python cosine similarity with graceful offline fallback.
 │   │   ├── ingest.py                     # Domain-agnostic ingestion pipeline archiving raw files to GCS domains/<domain_id>/ and indexing L1-L3 chunks.
-│   │   ├── schemas.py                    # Pydantic v2 contracts for MemoryChunk (L1 Summary / L2 Section / L3 Atomic Fact) and /v1/memory/ingest.
-│   │   └── store.py                      # CloudMemoryStore enforcing WHERE domain_id = @domain_id isolation, SMRITI_MEMORY_APPROVERS writes, and TTL recall.
+│   │   ├── schemas.py                    # Pydantic v2 contracts for MemoryChunk (L1 Summary / L2 Section / L3 Atomic Fact + FLOAT64 vector) and /v1/memory/ingest.
+│   │   └── store.py                      # Hybrid Vector + Structured CloudMemoryStore enforcing domain_id isolation, SMRITI_MEMORY_APPROVERS, and TTL recall.
 │   ├── router.py                         # Domain-agnostic <1ms deterministic time-grain (DoD/WoW/MoM/YoY) and lookback window extractor.
 │   ├── runner.py                         # Parallel asyncio.gather task executor with <=8.0s per-connector timeouts and circuit-breaker degradation.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
@@ -97,7 +98,7 @@ Smrithi_AI/
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
 │                                         # Enforces mathematical invariants at the schema level (e.g., phased rupee rows must sum to 100% of budget).
 ├── scripts/                              # Developer & ops CLI utilities for governed knowledge ingestion.
-│   └── ingest_memory.py                  # One-command CLI uploader sending PDF/DOCX/MD/XLSX/CSV files to /v1/memory/ingest with OIDC auth.
+│   └── ingest_memory.py                  # Single-file (--file) & batch folder (--dir) CLI uploader for PDF/DOCX/MD/XLSX/CSV files into Smriti Memory.
 └── tests/                                # Automated verification suite (offline unit tests run in <5s with zero cloud credentials).
     ├── __init__.py                       # Root test package marker.
     └── unit/                             # Fast, deterministic unit & architectural guardrail tests.
