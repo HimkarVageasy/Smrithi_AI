@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import date
 from statistics import median
 from typing import Any
 
 from core.guardrails.math_audit import audit_additive_total
+from core.memory.schemas import MemoryChunk
 from domains.performance_marketing.intake_extractor import extract_campaign_intake
 from domains.performance_marketing.math_engine import compute_net_cac, compute_net_roas
 from domains.performance_marketing.rules import classify_month_settlement
+from domains.performance_marketing.ruleset_excel import select_ruleset_override
 from domains.performance_marketing.schemas import (
     BudgetPhaseRow,
     CampaignPlanIntake,
@@ -19,8 +22,8 @@ from domains.performance_marketing.schemas import (
 __all__ = ["compute_campaign_strategy", "extract_campaign_intake"]
 
 
-def _split_80_20(phase_budget: int) -> tuple[int, int]:
-    prospecting = int(round(phase_budget * 0.80))
+def _split_funnel(phase_budget: int, prospecting_pct: float = 0.80) -> tuple[int, int]:
+    prospecting = int(round(phase_budget * prospecting_pct))
     retargeting = phase_budget - prospecting
     return prospecting, retargeting
 
@@ -30,14 +33,22 @@ def _build_phased_plan(
     *,
     scale_multiple: float | None,
     google_ads_enabled: bool,
+    ruleset_override: dict[str, Any] | None = None,
 ) -> PhasedBudgetPlan:
     rows: list[BudgetPhaseRow] = []
+    ovr = ruleset_override or {}
+    prosp_pct = float(ovr.get("prospecting_pct", 0.80))
+    prosp_lbl = f"Prospecting ({int(round(prosp_pct * 100))}%)"
+    retarg_lbl = f"Retargeting ({100 - int(round(prosp_pct * 100))}%)"
+
+    p1_share = float(ovr.get("phase_1_pct", 0.30 if google_ads_enabled else 0.25))
+    p2_share = float(ovr.get("phase_2_pct", 0.35))
 
     if google_ads_enabled:
         meta_total = int(round(budget_inr * 0.70))
         google_total = budget_inr - meta_total
-        p1 = int(round(meta_total * 0.30))
-        p2 = int(round(meta_total * 0.35))
+        p1 = int(round(meta_total * p1_share))
+        p2 = int(round(meta_total * p2_share))
         p3 = meta_total - p1 - p2
         meta_phases = [
             ("Phase 1 — Hook Validation", p1, 10, "Days 1–10", "Hold CTR >= 1.5% & CPC <= P50"),
@@ -45,26 +56,26 @@ def _build_phased_plan(
             ("Phase 3 — Peak Scale", p3, 10, "Days 21–30", "Hold blended CAC <= target band"),
         ]
         for p_name, amt, days, d_range, cond in meta_phases:
-            prosp, retarg = _split_80_20(amt)
+            prosp, retarg = _split_funnel(amt, prosp_pct)
             rows.append(
                 BudgetPhaseRow(
-                    phase_name=p_name, channel="Meta Ads", funnel_stage="Prospecting (80%)",
+                    phase_name=p_name, channel="Meta Ads", funnel_stage=prosp_lbl,
                     amount_inr=prosp, daily_run_rate_inr=max(1, round(prosp / days)),
                     date_range=d_range, scale_condition=cond,
                 )
             )
             rows.append(
                 BudgetPhaseRow(
-                    phase_name=p_name, channel="Meta Ads", funnel_stage="Retargeting (20%)",
+                    phase_name=p_name, channel="Meta Ads", funnel_stage=retarg_lbl,
                     amount_inr=retarg, daily_run_rate_inr=max(1, round(retarg / days)),
                     date_range=d_range, scale_condition="7d viewers + checkout abandoners",
                 )
             )
-        g_prosp, g_retarg = _split_80_20(google_total)
+        g_prosp, g_retarg = _split_funnel(google_total, prosp_pct)
         rows.append(
             BudgetPhaseRow(
                 phase_name="Always-On High-Intent Capture", channel="Google Ads",
-                funnel_stage="Prospecting (80%)", amount_inr=g_prosp,
+                funnel_stage=prosp_lbl, amount_inr=g_prosp,
                 daily_run_rate_inr=max(1, round(g_prosp / 30)), date_range="Days 1–30",
                 scale_condition="Exact/Phrase category search terms",
             )
@@ -72,14 +83,14 @@ def _build_phased_plan(
         rows.append(
             BudgetPhaseRow(
                 phase_name="Always-On High-Intent Capture", channel="Google Ads",
-                funnel_stage="Retargeting (20%)", amount_inr=g_retarg,
+                funnel_stage=retarg_lbl, amount_inr=g_retarg,
                 daily_run_rate_inr=max(1, round(g_retarg / 30)), date_range="Days 1–30",
                 scale_condition="Returning site visitors",
             )
         )
     else:
-        p1 = int(round(budget_inr * 0.25))
-        p2 = int(round(budget_inr * 0.35))
+        p1 = int(round(budget_inr * p1_share))
+        p2 = int(round(budget_inr * p2_share))
         p3 = budget_inr - p1 - p2
         meta_only_phases = [
             (
@@ -90,17 +101,17 @@ def _build_phased_plan(
             ("Phase 3 — Peak Scale", p3, 10, "Days 21–30", "Placed-order CAC within P75 band"),
         ]
         for p_name, amt, days, d_range, cond in meta_only_phases:
-            prosp, retarg = _split_80_20(amt)
+            prosp, retarg = _split_funnel(amt, prosp_pct)
             rows.append(
                 BudgetPhaseRow(
-                    phase_name=p_name, channel="Meta Ads", funnel_stage="Prospecting (80%)",
+                    phase_name=p_name, channel="Meta Ads", funnel_stage=prosp_lbl,
                     amount_inr=prosp, daily_run_rate_inr=max(1, round(prosp / days)),
                     date_range=d_range, scale_condition=cond,
                 )
             )
             rows.append(
                 BudgetPhaseRow(
-                    phase_name=p_name, channel="Meta Ads", funnel_stage="Retargeting (20%)",
+                    phase_name=p_name, channel="Meta Ads", funnel_stage=retarg_lbl,
                     amount_inr=retarg, daily_run_rate_inr=max(1, round(retarg / days)),
                     date_range=d_range, scale_condition="7d product viewers + checkout starters",
                 )
@@ -138,6 +149,7 @@ def compute_campaign_strategy(
     closed_account_rows: list[dict[str, Any]],
     today_ist: date,
     google_ads_enabled: bool = False,
+    memory_chunks: Sequence[MemoryChunk] = (),
 ) -> dict[str, Any]:
     """Compute historical P50/P75 baseline, scale multiple, feasibility pushback, and Rs plan."""
     closed_fam = [
@@ -184,12 +196,23 @@ def compute_campaign_strategy(
     )
     p50_cac = round(float(median(cac_points)), 2) if cac_points else 800.0
 
+    matched_rule = select_ruleset_override(memory_chunks, intake.product_query)
+    rule_dict = matched_rule[0] if matched_rule else None
+    rule_chunk = matched_rule[1] if matched_rule else None
+
     scale_mult = (
         round(intake.budget_inr / last_closed_spend, 2)
         if (last_closed_spend and last_closed_spend > 0)
         else None
     )
-    effective_target_roas = intake.target_roas if intake.target_roas is not None else p50_roas
+    rule_min_roas = float(rule_dict["min_roas_guardrail"]) if (
+        rule_dict and "min_roas_guardrail" in rule_dict
+    ) else None
+    effective_target_roas = (
+        intake.target_roas
+        if intake.target_roas is not None
+        else (rule_min_roas if rule_min_roas is not None else p50_roas)
+    )
 
     feasibility_ceiling = round(max(p75_roas * 1.25, p75_roas + 0.40), 2)
     is_feasible = True
@@ -215,6 +238,7 @@ def compute_campaign_strategy(
         intake.budget_inr,
         scale_multiple=scale_mult,
         google_ads_enabled=google_ads_enabled,
+        ruleset_override=rule_dict,
     )
     return {
         "intake": intake,
@@ -228,4 +252,6 @@ def compute_campaign_strategy(
         "is_target_feasible": is_feasible,
         "verdict": verdict,
         "phased_plan": phased_plan,
+        "applied_ruleset_chunk": rule_chunk,
+        "memory_chunks": list(memory_chunks),
     }

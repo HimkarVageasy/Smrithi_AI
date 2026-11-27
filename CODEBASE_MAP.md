@@ -39,12 +39,19 @@ Smrithi_AI/
 │   ├── cache.py                          # Stateless bounded LRU + 5-min TTL RAM cache for live connector calls (upgradable to Firestore/Redis).
 │   ├── config.py                         # Immutable AppConfig model reading runtime flags strictly from environment variables.
 │   │                                     # Guarantees stateless Cloud Run execution with zero local config state.
+│   ├── domain_router.py                  # Behind-the-scenes multi-domain auto-router and SMRITI_DOMAIN_ACL department access gate for the single Smriti agent.
 │   ├── guardrails/                       # Deterministic pure-Python pre-query, math, and output safety gates.
 │   │   ├── __init__.py                   # Guardrails package marker.
 │   │   ├── math_audit.py                 # Gate #2 cross-table reconciliation auditor (window subset bounds, funnel monotonicity, additive sums, Cloud Logging alerts).
 │   │   ├── output_audit.py               # Regex PII scrubber (Indian phones/emails), causal/margin word blocker, and mandatory [Source · Window] check.
 │   │   └── sql_ast.py                    # sqlglot AST validator enforcing single-SELECT queries, table allowlists, PII blocks, and 500 MB scan cap.
 │   │                                     # Prevents warehouse mutations, unapproved table scans, and accidental PII leaks before BigQuery runs.
+│   ├── memory/                           # Universal domain-isolated Institutional Memory engine (BigQuery smriti_memory_chunks + GCS domain folders).
+│   │   ├── __init__.py                   # Memory subpackage marker.
+│   │   ├── doc_parser.py                 # Stateless pure-Python MD/TXT/CSV/XLSX/DOCX/PDF extractor decomposing documents into PII-scrubbed L1/L2/L3 chunks.
+│   │   ├── ingest.py                     # Domain-agnostic ingestion pipeline archiving raw files to GCS domains/<domain_id>/ and indexing L1-L3 chunks.
+│   │   ├── schemas.py                    # Pydantic v2 contracts for MemoryChunk (L1 Summary / L2 Section / L3 Atomic Fact) and /v1/memory/ingest.
+│   │   └── store.py                      # CloudMemoryStore enforcing WHERE domain_id = @domain_id isolation, SMRITI_MEMORY_APPROVERS writes, and TTL recall.
 │   ├── router.py                         # Domain-agnostic <1ms deterministic time-grain (DoD/WoW/MoM/YoY) and lookback window extractor.
 │   ├── runner.py                         # Parallel asyncio.gather task executor with <=8.0s per-connector timeouts and circuit-breaker degradation.
 │   └── schemas.py                        # Domain-agnostic Pydantic v2 contracts (SmritiQueryRequest, SmritiQueryResponse, Citation, HealthResponse).
@@ -77,16 +84,20 @@ Smrithi_AI/
 │       ├── kpi_presenter.py              # Verified Account & Ad-Family report builder computing 100% of SUM/SUM ROAS, CAC, and MoM deltas in Python.
 │       │                                 # Flags provisional/settling months and stamps inline [Source: BigQuery ...] citations.
 │       ├── live_presenter.py             # Multi-source presenter combining BigQuery financial truth, Mixpanel 3-step funnel, Cross-Source CVR, and live ad pulse.
-│       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/MoM/YoY deltas, part-month clipping, and Rs formatting.
+│       ├── math_engine.py                # Pure-Python calculator for SUM/SUM Net ROAS & CAC, CPM, DoD/WoW/DoD/YoY deltas, part-month clipping, and Rs formatting.
 │       │                                 # Ensures LLMs never compute ratios, average rates, or include Brand awareness spend in ROAS/CAC.
+│       ├── memory_handler.py             # Governed APPROVED_DECISION chat save & cited Institutional Memory recall presenter for Performance Marketing.
 │       ├── plan_presenter.py             # Executive presenter for Structured Campaign Briefs (Golden #3–#5) and Competitor Creative Audits (Golden #6).
 │       ├── plugin.py                     # DomainPlugin Supervisor orchestrating <1s refusals, parallel core.runner execution, strategy math, and cited output.
 │       ├── prompts/                      # Governed prompt templates for read-only narrative formatting.
 │       │   └── narrator.md               # Executive narrator instructions enforcing zero LLM math, causal word bans, and <=3 confirmation questions.
 │       ├── rules.py                      # Deterministic <1s Known Refusal interceptor (Product/City/Daily/Brand ROAS, mutations) and settlement status classifier.
 │       │                                 # Turns impossible queries that previously timed out after 44 minutes into instant helpful explanations.
+│       ├── ruleset_excel.py              # Marketing Excel/CSV channel & phasing ruleset adapter converting spreadsheets into typed L1/L3 MemoryChunks.
 │       └── schemas.py                    # Strict Pydantic v2 models for marketing intents, campaign intake, and PhasedBudgetPlan.
 │                                         # Enforces mathematical invariants at the schema level (e.g., phased rupee rows must sum to 100% of budget).
+├── scripts/                              # Developer & ops CLI utilities for governed knowledge ingestion.
+│   └── ingest_memory.py                  # One-command CLI uploader sending PDF/DOCX/MD/XLSX/CSV files to /v1/memory/ingest with OIDC auth.
 └── tests/                                # Automated verification suite (offline unit tests run in <5s with zero cloud credentials).
     ├── __init__.py                       # Root test package marker.
     └── unit/                             # Fast, deterministic unit & architectural guardrail tests.
@@ -106,5 +117,6 @@ Smrithi_AI/
         ├── test_runner_and_cache.py      # Tests InMemoryTTLCache LRU/TTL behavior and parallel runner <=8s circuit-breaker timeouts.
         ├── test_schemas.py               # Validates request constraints and PhasedBudgetPlan exact 100% rupee sum enforcement (including A/B carve-outs).
         ├── test_slice3_campaign_and_rivals.py # Tests Golden Scenarios #3 (Rs 3L plan), #4 (6.0x pushback), #5 ("Need to run"), #6 (Rival <=50 cap), and odd-rupee sums.
+        ├── test_slice4_memory_and_multidomain.py # Tests XLSX/DOCX ingestion, ruleset plan overrides, PII scrub, approver allowlist, and multi-domain isolation.
         └── test_sql_guardrails.py        # Tests sqlglot DDL/DML blocking, unallowlisted table rejection, CTE handling, and PII column / SELECT * blocks.
 ```

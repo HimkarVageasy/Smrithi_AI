@@ -16,6 +16,8 @@ from domains.performance_marketing.rules import GrainBoundaryCaveat, detect_grai
 
 QueryFocus = Literal[
     "ping",
+    "memory_save",
+    "memory_recall",
     "campaign_plan",
     "competitor_intel",
     "account_and_family_mom",
@@ -30,6 +32,24 @@ QueryFocus = Literal[
 
 _PING_RE = re.compile(
     r"^\s*(?:ping(?:\s+smriti(?:\s+v2)?)?|health\s*check)[!\s.?]*$",
+    re.IGNORECASE,
+)
+
+_MEMORY_SAVE_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:save(?:\s+this)?(?:\s+to)?(?:\s+smriti)?\s+"
+    r"(?:memory|approved\s+plan|approved\s+decision|approved\s+brief|learning|rule)|"
+    r"remember\s+this\s+(?:approved\s+)?(?:learning|rule|decision)|"
+    r"record\s+(?:this\s+)?(?:campaign\s+)?(?:learning|decision))\b",
+    re.IGNORECASE,
+)
+
+_MEMORY_RECALL_RE = re.compile(
+    r"\b("
+    r"smriti\s+memory|institutional\s+memory|saved\s+(?:learnings?|decisions?|plans?|rules?|brds?)|"
+    r"past\s+(?:brds?|post[-\s]?mortems?|learnings?)|post[-\s]?mortems?|channel\s+rulesets?|"
+    r"excel\s+rulesets?|media\s+rulesets?|what\s+worked\s+(?:last|in\s+past)|"
+    r"what\s+did\s+we\s+learn|recall\s+(?:memory|learnings?)"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -93,13 +113,32 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
     matched_family = prod.product_family
     matched_catalogue = prod.catalogue_product
     matched_city = resolve_city(q)
-    caveat = detect_grain_boundary_caveat(q)
+
+    if _MEMORY_SAVE_RE.search(q):
+        return ParsedMarketingQuery(
+            focus="memory_save",
+            grain="MoM",
+            window_count=1,
+            product_family=matched_family,
+            catalogue_product=matched_catalogue,
+            city=matched_city,
+        )
 
     if is_campaign_planning_query(q):
         return ParsedMarketingQuery(
             focus="campaign_plan",
             grain="MoM",
             window_count=4,
+            product_family=matched_family,
+            catalogue_product=matched_catalogue,
+            city=matched_city,
+        )
+
+    if _MEMORY_RECALL_RE.search(q):
+        return ParsedMarketingQuery(
+            focus="memory_recall",
+            grain="MoM",
+            window_count=1,
             product_family=matched_family,
             catalogue_product=matched_catalogue,
             city=matched_city,
@@ -115,6 +154,7 @@ def parse_marketing_query(question: str) -> ParsedMarketingQuery:
             city=matched_city,
         )
 
+    caveat = detect_grain_boundary_caveat(q)
     if caveat is not None:
         if caveat.kind == "product_roas":
             return ParsedMarketingQuery(

@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from datetime import date, timedelta
 from typing import Any
 
+from core.memory.store import CloudMemoryStore
 from core.runner import CollectorTask
 from domains.performance_marketing.collectors.bigquery_poc import BigQueryPocCollector
 from domains.performance_marketing.collectors.google_ad_transparency import (
@@ -17,6 +18,7 @@ from domains.performance_marketing.collectors.meta_ads_account import MetaAdsAcc
 from domains.performance_marketing.collectors.mixpanel_live import MixpanelLiveCollector
 from domains.performance_marketing.collectors.web_competitor import WebCompetitorCollector
 from domains.performance_marketing.intent_parser import ParsedMarketingQuery
+from domains.performance_marketing.ruleset_excel import extract_marketing_tags_from_text
 
 
 def _task(
@@ -40,11 +42,28 @@ def build_collection_tasks(
     meta_lib: MetaAdLibraryCollector,
     google_transp: GoogleAdTransparencyCollector,
     web_comp: WebCompetitorCollector,
+    memory_store: CloudMemoryStore | None = None,
 ) -> list[CollectorTask]:
     """Assemble concurrent read-only tasks per routed intent."""
     end_yday = today_ist - timedelta(days=1)
     start_28d = end_yday - timedelta(days=27)
     search_term = routed.catalogue_product or routed.product_family or "senior care health devices"
+    mem_tags = extract_marketing_tags_from_text(question)
+
+    if routed.focus == "memory_recall":
+        if memory_store is None:
+            return []
+        return [
+            _task(
+                "Smriti Memory",
+                lambda: memory_store.recall(
+                    domain_id="performance_marketing",
+                    entity_tags=mem_tags,
+                    limit=10,
+                ),
+                critical=False,
+            )
+        ]
 
     if routed.focus == "competitor_intel":
         tasks = [
@@ -105,6 +124,18 @@ def build_collection_tasks(
                 critical=False,
             ),
         ]
+        if memory_store is not None:
+            tasks.append(
+                _task(
+                    "Smriti Memory",
+                    lambda: memory_store.recall(
+                        domain_id="performance_marketing",
+                        entity_tags=mem_tags,
+                        limit=6,
+                    ),
+                    critical=False,
+                )
+            )
         if google_ads.is_enabled:
             tasks.append(
                 _task(

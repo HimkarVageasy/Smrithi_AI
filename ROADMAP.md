@@ -28,21 +28,20 @@
 
 ---
 
-## Slice 3: Competitor Ad Libraries & Campaign Planning Engine — ✅ BUILT (Pending Live Verify)
+## Slice 3: Competitor Ad Libraries & Campaign Planning Engine — ✅ COMPLETED (Nov 26, 2026)
 - Plugged in `meta_ad_library.py` (`<= 50` rival creative sampler per `Rule F2`) + `google_ad_transparency.py` + `web_competitor.py`.
-- Implemented deterministic Campaign Strategist & Phasing allocator in `campaign_planner.py` (exact scale-up multiple, `6.0x` ROAS feasibility pushback, channel & 3-phase ramp, `80/20` funnel split, 14-day A/B test carve-out summing strictly to `100%` of budget).
-- Wired `plan_presenter.py` + `prompts/narrator.md` + inline `[Source · Period]` citation & causal-word auditor covering Golden Scenarios #3, #4, #5, and #6.
+- Implemented deterministic Campaign Strategist & Phasing allocator in `campaign_planner.py` (exact scale-up multiple, `6.0x` ROAS feasibility pushback, channel & 3-phase ramp, `80/20` funnel split, 14-day A/B test carve-out summing strictly to `100%` of budget) plus comprehensive natural-language & Rupee/word budget lexicon (`entity_lexicon.py`).
+- Wired `plan_presenter.py` + `prompts/narrator.md` + inline `[Source · Period]` citation & causal-word auditor covering Golden Scenarios #3, #4, #5, and #6 (`Verified Live` on `Smriti-v2-Dev`).
 
 ---
 
-## Slice 4: "Smriti" Institutional Memory (Knowledge Retention)
-- Build `core/memory/` backed by **BigQuery (`smriti_memory_chunks`) + Vertex AI Search Datastore** (zero extra database servers to maintain).
-- Support governed ingestion of:
-  1. Past BRDs / Post-Mortem docs (`OFFICIAL_DOC`)
-  2. Excel Media Rulesets / Channel Policies (`ruleset_excel.py`)
-  3. Explicit `"Save Approved Plan / Learning"` action from authorized users (`APPROVED_DECISION`) using the L1 Summary -> L2 Section -> L3 Atomic Fact hierarchy.
-- Wire automatic `< 500ms` memory retrieval into Campaign Planning and Memory Recall intents.
-- **Done When:** Uploading/saving a past campaign post-mortem immediately enriches the next Campaign Brief with cited historical learnings (`[Memory: <Doc>, Verified]`).
+## Slice 4: "Smriti" Institutional Memory (Knowledge Retention) — ✅ BUILT (Pending Live Verify)
+- Built universal `core/memory/` (`schemas.py`, `doc_parser.py`, `store.py`, `ingest.py`) backed by **BigQuery (`Gemini_POC.smriti_memory_chunks` clustered by `domain_id, level`) + GCS (`domains/<domain_id>/`)** plus behind-the-scenes multi-domain auto-router (`core/domain_router.py`).
+- Added governed ingestion (`POST /v1/memory/ingest` + `scripts/ingest_memory.py` + `SMRITI_MEMORY_APPROVERS` gate) for:
+  1. Official BRDs / Post-Mortem docs (`PDF`, `DOCX`, `MD` -> `OFFICIAL_DOC`)
+  2. Marketing Excel / CSV Channel & Phasing Rulesets (`ruleset_excel.py` -> live funnel/phase split overrides)
+  3. Explicit `"Save to Smriti memory: ..."` chat capture (`APPROVED_DECISION`) using the L1 Summary -> L2 Section -> L3 Atomic Fact hierarchy.
+- Wired automatic parallel `< 500ms` `domain_id`-isolated memory retrieval into Campaign Planning and Memory Recall intents.
 
 ---
 
